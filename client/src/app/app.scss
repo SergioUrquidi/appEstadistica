@@ -1,0 +1,12 @@
+:host { display:block; min-height:100vh; color:#172033; }
+.topbar { position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:2rem; min-height:70px; padding:0 clamp(1rem,5vw,4rem); border-bottom:1px solid #e6eaf0; background:#ffffffed; backdrop-filter:blur(12px); }
+.brand { display:flex; align-items:center; gap:.7rem; color:#172033; text-decoration:none; font-weight:800; }
+.brand-mark { display:grid; place-items:center; width:2.4rem; height:2.4rem; border-radius:9px; color:white; background:#185adb; font-size:1.3rem; }
+.brand small { display:block; margin-top:.12rem; color:#64748b; font-size:.68rem; font-weight:500; }
+nav { display:flex; gap:1rem; }
+nav a { color:#475569; text-decoration:none; font-size:.9rem; font-weight:600; }
+.account { display:flex; align-items:center; gap:1rem; margin-left:auto; color:#64748b; font-size:.82rem; }
+.account button { border:0; padding:.45rem .7rem; border-radius:7px; color:#334155; background:#f1f5f9; font:inherit; font-weight:700; cursor:pointer; }
+main { width:min(1120px, calc(100% - 2rem)); min-height:calc(100vh - 130px); margin:0 auto; padding:1.5rem 0 3rem; }
+footer { padding:1rem; color:#94a3b8; text-align:center; font-size:.75rem; }
+@media(max-width:600px) { .topbar { gap:1rem; } .account span { display:none; } }
