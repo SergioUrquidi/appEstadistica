@@ -21,9 +21,19 @@ describe('SurveysComponent', () => {
     const fixture = TestBed.createComponent(SurveysComponent);
     fixture.autoDetectChanges();
     http.expectOne('/api/surveys').flush([]);
+    http.expectOne('/api/survey-modes').flush([
+      {
+        code: 'opinion',
+        label: 'Encuesta de opinión',
+        description: 'Respuestas según el criterio del participante.',
+        requires_correct_answer: false,
+        grades_answers: false,
+      },
+    ]);
     await fixture.whenStable();
 
     fixture.componentInstance.title = 'Encuesta de prueba';
+    fixture.componentInstance.modeCode = 'opinion';
     const creating = fixture.componentInstance.createSurvey();
     http.expectOne({ method: 'POST', url: '/api/surveys' }).flush({
       id: 'survey-1',
@@ -38,6 +48,6 @@ describe('SurveysComponent', () => {
 
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('.survey-card h2')?.textContent).toContain('Encuesta de prueba');
-    expect((element.querySelector('button') as HTMLButtonElement).disabled).toBe(false);
+    expect(fixture.componentInstance.busy).toBe(false);
   });
 });

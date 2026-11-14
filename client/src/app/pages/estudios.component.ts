@@ -5,7 +5,7 @@ import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../core/auth.service';
-import { Group, Study } from '../core/models';
+import { Group, Study, SurveyMode } from '../core/models';
 import { ButtonComponent } from '../shared/button.component';
 
 @Component({
@@ -43,9 +43,18 @@ import { ButtonComponent } from '../shared/button.component';
               <option value="noche">Noche (19:00 – 22:00)</option>
             </select>
           </label>
+          <label>Enfoque de las encuestas
+            <select name="modeCode" [(ngModel)]="form.modeCode" required>
+              <option value="" disabled>Selecciona el enfoque</option>
+              @for (mode of modes; track mode.code) {
+                <option [value]="mode.code">{{ mode.label }}</option>
+              }
+            </select>
+          </label>
           <label>Fecha (opcional)
             <input name="date" type="date" [(ngModel)]="form.date">
           </label>
+          @if (selectedMode) { <p class="muted wide">{{ selectedMode.description }}</p> }
           <label class="wide">Descripción (opcional)
             <textarea name="description" [(ngModel)]="form.description" rows="2" maxlength="5000"></textarea>
           </label>
@@ -63,7 +72,7 @@ import { ButtonComponent } from '../shared/button.component';
             </div>
           </div>
           @if (formError) { <p class="error wide" role="alert">{{ formError }}</p> }
-          <app-button type="submit" class="wide" [disabled]="busy || selectedGroupNames.size === 0">
+          <app-button type="submit" class="wide" [disabled]="busy || !form.modeCode || selectedGroupNames.size === 0">
             {{ busy ? 'Creando…' : 'Crear feria y ' + selectedGroupNames.size + ' encuesta' + (selectedGroupNames.size !== 1 ? 's' : '') }}
           </app-button>
         </form>
@@ -150,12 +159,13 @@ import { ButtonComponent } from '../shared/button.component';
 export class EstudiosComponent implements OnInit {
   studies: Study[] = [];
   groups: Group[] = [];
+  modes: SurveyMode[] = [];
   selectedGroupNames = new Set<string>();
   loading = true;
   busy = false;
   showForm = false;
   formError = '';
-  form = { title: '', description: '', shift: 'mañana', date: '' };
+  form = { title: '', description: '', shift: 'mañana', date: '', modeCode: '' };
 
   get groupSummary(): string {
     return this.groups.map((g) => g.etiqueta).join(' · ');
@@ -174,9 +184,10 @@ export class EstudiosComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     try {
-      [this.studies, this.groups] = await Promise.all([
+      [this.studies, this.groups, this.modes] = await Promise.all([
         firstValueFrom(this.http.get<Study[]>('/api/estudios')),
         firstValueFrom(this.http.get<Group[]>('/api/grupos')),
+        firstValueFrom(this.http.get<SurveyMode[]>('/api/survey-modes')),
       ]);
       this.selectedGroupNames = new Set(this.groups.map((g) => g.nombre));
     } finally {
@@ -199,7 +210,7 @@ export class EstudiosComponent implements OnInit {
   }
 
   async createStudy(): Promise<void> {
-    if (!this.form.title.trim() || !this.form.shift || this.selectedGroupNames.size === 0) return;
+    if (!this.form.title.trim() || !this.form.shift || !this.form.modeCode || this.selectedGroupNames.size === 0) return;
     this.busy = true;
     this.formError = '';
     try {
@@ -207,12 +218,13 @@ export class EstudiosComponent implements OnInit {
         title: this.form.title.trim(),
         description: this.form.description.trim(),
         shift: this.form.shift,
+        modeCode: this.form.modeCode,
         date: this.form.date || undefined,
         groups: Array.from(this.selectedGroupNames),
       }));
       this.studies = [created, ...this.studies];
       this.showForm = false;
-      this.form = { title: '', description: '', shift: 'mañana', date: '' };
+      this.form = { title: '', description: '', shift: 'mañana', date: '', modeCode: '' };
       this.selectedGroupNames = new Set(this.groups.map((g) => g.nombre));
     } catch {
       this.formError = 'No se pudo crear la feria. Verificá los datos e intentá nuevamente.';
@@ -224,5 +236,9 @@ export class EstudiosComponent implements OnInit {
 
   statusLabel(status: string): string {
     return status === 'activo' ? 'Activo' : status === 'cerrado' ? 'Cerrado' : 'Borrador';
+  }
+
+  get selectedMode(): SurveyMode | null {
+    return this.modes.find((mode) => mode.code === this.form.modeCode) ?? null;
   }
 }

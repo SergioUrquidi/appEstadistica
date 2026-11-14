@@ -96,7 +96,18 @@ async function findSurveyForUser(surveyId, user) {
   if (!['admin', 'superuser'].includes(user.role) && survey.creator_id !== user.sub) {
     return { error: 'No tienes permisos para esta operación.', status: 403 };
   }
-  return { survey };
+  const modeResult = await pool.query(
+    `SELECT e.modo_codigo AS mode_code, m.etiqueta AS mode_label,
+            m.descripcion AS mode_description,
+            COALESCE(m.requiere_clave_correcta, false) AS requires_correct_answer,
+            COALESCE(m.califica_respuestas, false) AS grades_answers
+     FROM estadistica.encuestas e
+     LEFT JOIN estadistica.modos_encuesta m ON m.codigo = e.modo_codigo
+     WHERE e.id = $1`,
+    [survey.id],
+  );
+  if (!modeResult.rows[0]) throw new Error('No se pudo recuperar el modo de la encuesta.');
+  return { survey: { ...survey, ...modeResult.rows[0] } };
 }
 
 async function buildReport(survey) {
@@ -111,28 +122,49 @@ async function buildReport(survey) {
     'SELECT * FROM estadistica.fn_preguntas_encuesta($1)',
     [survey.id],
   );
+  const toNullableNumber = (value) =>
+    value === null || value === undefined ? null : Number(value);
   const statistics = [];
   for (const question of questions.rows) {
-    const [stats, frequencies] = await Promise.all([
-      pool.query(
+    const statsQuery = question.is_numeric
+      ? pool.query(
         `SELECT universo AS universe, media AS mean, mediana AS median, moda AS mode,
                 rango AS value_range, maximo AS maximum, minimo AS minimum,
                 coeficiente_variacion AS coefficient_of_variation, varianza AS variance,
                 desviacion_estandar AS standard_deviation
          FROM estadistica.fn_estadisticas_pregunta_numerica($1)`,
         [question.id],
-      ),
-      pool.query(
-        'SELECT * FROM estadistica.fn_frecuencias_pregunta($1)',
-        [question.id],
-      ),
+      )
+      : null;
+    const frequenciesQuery = pool.query(
+      question.is_numeric
+        ? 'SELECT value::text, frequency FROM estadistica.fn_frecuencias_pregunta($1)'
+        : 'SELECT value, frequency, universe FROM estadistica.fn_frecuencias_opciones_pregunta($1)',
+      [question.id],
+    );
+    const [statsResult, frequencies] = await Promise.all([
+      statsQuery,
+      frequenciesQuery,
     ]);
+    const numericStats = statsResult?.rows[0] ?? null;
+    const categoricalUniverse = frequencies.rows[0]?.universe;
     statistics.push({
       questionId: question.id,
       prompt: question.prompt,
-      ...Object.fromEntries(Object.entries(stats.rows[0]).map(([key, value]) => [key, value === null ? null : Number(value)])),
+      questionTypeLabel: question.question_type_label,
+      isNumeric: question.is_numeric,
+      universe: Number(numericStats?.universe ?? categoricalUniverse ?? 0),
+      mean: toNullableNumber(numericStats?.mean),
+      median: toNullableNumber(numericStats?.median),
+      mode: toNullableNumber(numericStats?.mode),
+      value_range: toNullableNumber(numericStats?.value_range),
+      maximum: toNullableNumber(numericStats?.maximum),
+      minimum: toNullableNumber(numericStats?.minimum),
+      coefficient_of_variation: toNullableNumber(numericStats?.coefficient_of_variation),
+      variance: toNullableNumber(numericStats?.variance),
+      standard_deviation: toNullableNumber(numericStats?.standard_deviation),
       frequencies: frequencies.rows.map((row) => ({
-        value: Number(row.value),
+        value: question.is_numeric ? String(Number(row.value)) : String(row.value),
         frequency: Number(row.frequency),
       })),
     });
@@ -209,8 +241,27 @@ app.post('/api/users', authenticate, allowRoles('admin', 'superuser'), asyncRout
 
 app.get('/api/surveys', authenticate, asyncRoute(async (req, res) => {
   const result = await pool.query(
-    'SELECT * FROM estadistica.fn_encuestas_usuario($1, $2)',
+    `SELECT s.*, e.modo_codigo AS mode_code, m.etiqueta AS mode_label,
+            m.descripcion AS mode_description,
+            COALESCE(m.requiere_clave_correcta, false) AS requires_correct_answer,
+            COALESCE(m.califica_respuestas, false) AS grades_answers
+     FROM estadistica.fn_encuestas_usuario($1, $2) s
+     JOIN estadistica.encuestas e ON e.id = s.id
+     LEFT JOIN estadistica.modos_encuesta m ON m.codigo = e.modo_codigo
+     ORDER BY s.created_at DESC`,
     [req.user.sub, ['admin', 'superuser'].includes(req.user.role)],
+  );
+  return res.json(result.rows);
+}));
+
+app.get('/api/survey-modes', authenticate, asyncRoute(async (_req, res) => {
+  const result = await pool.query(
+    `SELECT codigo AS code, etiqueta AS label, descripcion AS description,
+            requiere_clave_correcta AS requires_correct_answer,
+            califica_respuestas AS grades_answers
+     FROM estadistica.modos_encuesta
+     WHERE activo
+     ORDER BY orden`,
   );
   return res.json(result.rows);
 }));
@@ -219,52 +270,193 @@ app.post('/api/surveys', authenticate, asyncRoute(async (req, res) => {
   const input = validate(z.object({
     title: z.string().trim().min(1).max(200),
     description: z.string().max(5000).default(''),
+    modeCode: z.string().trim().min(1),
   }), req.body);
-  const callResult = await pool.query(
-    'CALL estadistica.usp_crear_encuesta($1, $2, $3, NULL, NULL)',
-    [input.title, input.description, req.user.sub],
+  let callResult;
+  try {
+    callResult = await pool.query(
+      'CALL estadistica.usp_crear_encuesta($1, $2, $3, $4, NULL, NULL)',
+      [input.title, input.description, input.modeCode, req.user.sub],
+    );
+  } catch (error) {
+    if (error.code === 'P0001') return res.status(400).json({ error: error.message.replaceAll('_', ' ') });
+    throw error;
+  }
+  const modeResult = await pool.query(
+    `SELECT codigo AS mode_code, etiqueta AS mode_label, descripcion AS mode_description,
+            requiere_clave_correcta AS requires_correct_answer,
+            califica_respuestas AS grades_answers
+     FROM estadistica.modos_encuesta WHERE codigo = $1`,
+    [input.modeCode],
   );
-  return res.status(201).json({ id: callResult.rows[0].p_id, title: input.title, description: input.description, status: 'draft', created_at: callResult.rows[0].p_created_at });
+  return res.status(201).json({
+    id: callResult.rows[0].p_id,
+    title: input.title,
+    description: input.description,
+    status: 'draft',
+    created_at: callResult.rows[0].p_created_at,
+    ...modeResult.rows[0],
+  });
 }));
 
 app.get('/api/surveys/:surveyId', authenticate, asyncRoute(async (req, res) => {
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
   const questions = await pool.query(
-    'SELECT * FROM estadistica.fn_preguntas_encuesta($1)',
+    'SELECT * FROM estadistica.fn_preguntas_encuesta_admin($1)',
     [survey.id],
   );
   return res.json({ ...survey, questions: questions.rows });
+}));
+
+app.get('/api/question-types', authenticate, asyncRoute(async (_req, res) => {
+  const result = await pool.query(
+    `SELECT codigo AS code, etiqueta AS label, es_numerica AS is_numeric,
+            permite_multiple AS allows_multiple, min_opciones AS min_options
+     FROM estadistica.tipos_pregunta
+     WHERE activo
+     ORDER BY orden`,
+  );
+  return res.json(result.rows);
+}));
+
+app.put('/api/surveys/:surveyId/mode', authenticate, asyncRoute(async (req, res) => {
+  const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
+  if (error) return res.status(status).json({ error });
+  if (survey.status !== 'draft') return res.status(409).json({ error: 'Solo se puede definir el enfoque de un borrador.' });
+  const input = validate(z.object({ modeCode: z.string().trim().min(1) }), req.body);
+  try {
+    await pool.query(
+      'CALL estadistica.usp_definir_modo_encuesta($1, $2, $3)',
+      [survey.id, input.modeCode, req.user.sub],
+    );
+  } catch (error) {
+    if (error.code === 'P0001') return res.status(400).json({ error: error.message.replaceAll('_', ' ') });
+    throw error;
+  }
+  const result = await pool.query(
+    `SELECT codigo AS code, etiqueta AS label, descripcion AS description,
+            requiere_clave_correcta AS requires_correct_answer,
+            califica_respuestas AS grades_answers
+     FROM estadistica.modos_encuesta WHERE codigo = $1`,
+    [input.modeCode],
+  );
+  if (!result.rows[0]) throw new Error('No se pudo recuperar el modo recién definido.');
+  return res.json(result.rows[0]);
 }));
 
 app.post('/api/surveys/:surveyId/questions', authenticate, asyncRoute(async (req, res) => {
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
   if (survey.status !== 'draft') return res.status(409).json({ error: 'No se pueden cambiar preguntas después de activar la encuesta.' });
+  if (!survey.mode_code) return res.status(409).json({ error: 'Define el enfoque de la encuesta antes de agregar preguntas.' });
   const input = validate(z.object({
     prompt: z.string().trim().min(1).max(1000),
+    questionType: z.string().trim().min(1),
+    options: z.array(z.object({
+      label: z.string().trim().min(1).max(300),
+      is_correct: z.boolean(),
+    })).default([]),
     minValue: z.number().finite().nullable().default(null),
     maxValue: z.number().finite().nullable().default(null),
+    correctValue: z.number().finite().nullable().default(null),
   }).refine((value) =>
-    value.minValue === null || value.maxValue === null || value.minValue <= value.maxValue,
+    (value.minValue === null || value.maxValue === null || value.minValue <= value.maxValue)
+      && (value.minValue === null || value.correctValue === null || value.correctValue >= value.minValue)
+      && (value.maxValue === null || value.correctValue === null || value.correctValue <= value.maxValue),
   ), req.body);
-  const callResult = await pool.query(
-    'CALL estadistica.usp_agregar_pregunta($1, $2, $3, $4, $5, NULL, NULL, NULL, NULL)',
-    [survey.id, input.prompt, input.minValue, input.maxValue, req.user.sub],
+  let callResult;
+  try {
+    callResult = await pool.query(
+      'CALL estadistica.usp_agregar_pregunta($1, $2, $3, $4, $5, $6, $7, $8::jsonb, NULL, NULL)',
+      [
+        survey.id,
+        input.prompt,
+        input.minValue,
+        input.maxValue,
+        input.correctValue,
+        req.user.sub,
+        input.questionType,
+        JSON.stringify(input.options),
+      ],
+    );
+  } catch (error) {
+    if (error.code === 'P0001') return res.status(400).json({ error: error.message.replaceAll('_', ' ') });
+    throw error;
+  }
+  const question = await pool.query(
+    'SELECT * FROM estadistica.fn_preguntas_encuesta_admin($1) WHERE id = $2',
+    [survey.id, callResult.rows[0].p_id],
   );
-  const r = callResult.rows[0];
-  return res.status(201).json({ id: r.p_id, position: r.p_position, prompt: input.prompt, min_value: r.p_min, max_value: r.p_max });
+  return res.status(201).json(question.rows[0]);
+}));
+
+app.put('/api/surveys/:surveyId/questions/:questionId/answer-key', authenticate, asyncRoute(async (req, res) => {
+  const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
+  if (error) return res.status(status).json({ error });
+  if (survey.status !== 'draft' || !survey.requires_correct_answer) {
+    return res.status(409).json({ error: 'Solo una prueba de conocimiento en borrador admite claves de respuesta.' });
+  }
+  const input = validate(z.object({
+    correctValue: z.number().finite().nullable().default(null),
+    optionIds: z.array(z.string().uuid()).default([]),
+  }), req.body);
+  try {
+    await pool.query(
+      'CALL estadistica.usp_definir_clave_pregunta($1, $2, $3, $4::jsonb, $5)',
+      [survey.id, req.params.questionId, input.correctValue, JSON.stringify(input.optionIds), req.user.sub],
+    );
+  } catch (error) {
+    if (error.code === 'P0001') return res.status(400).json({ error: error.message.replaceAll('_', ' ') });
+    throw error;
+  }
+  const question = await pool.query(
+    'SELECT * FROM estadistica.fn_preguntas_encuesta_admin($1) WHERE id = $2',
+    [survey.id, req.params.questionId],
+  );
+  if (!question.rows[0]) return res.status(404).json({ error: 'No se encontró la pregunta.' });
+  return res.json(question.rows[0]);
 }));
 
 app.post('/api/surveys/:surveyId/activate', authenticate, asyncRoute(async (req, res) => {
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
   if (survey.status !== 'draft') return res.status(409).json({ error: 'Solo se pueden activar encuestas en borrador.' });
+  if (!survey.mode_code) return res.status(400).json({ error: 'Define el enfoque antes de activar la encuesta.' });
+  const readiness = await pool.query(
+    `SELECT count(q.id)::integer AS question_count,
+            count(q.id) FILTER (
+              WHERE (t.es_numerica AND q.valor_correcto IS NULL)
+                 OR (NOT t.es_numerica AND NOT EXISTS (
+                   SELECT 1 FROM estadistica.opciones_pregunta o
+                   WHERE o.pregunta_id = q.id AND o.es_correcta
+                 ))
+            )::integer AS missing_keys,
+            count(q.id) FILTER (
+              WHERE q.valor_correcto IS NOT NULL OR EXISTS (
+                SELECT 1 FROM estadistica.opciones_pregunta o
+                WHERE o.pregunta_id = q.id AND o.es_correcta
+              )
+            )::integer AS configured_keys
+     FROM estadistica.preguntas q
+     JOIN estadistica.tipos_pregunta t ON t.codigo = q.tipo_codigo
+     WHERE q.encuesta_id = $1`,
+    [survey.id],
+  );
+  if (!Number(readiness.rows[0].question_count)) {
+    return res.status(400).json({ error: 'Agrega al menos una pregunta antes de activar la encuesta.' });
+  }
+  if (survey.requires_correct_answer && Number(readiness.rows[0].missing_keys)) {
+    return res.status(400).json({ error: 'Configura la respuesta correcta de cada pregunta antes de activar la prueba.' });
+  }
+  if (!survey.requires_correct_answer && Number(readiness.rows[0].configured_keys)) {
+    return res.status(400).json({ error: 'Una encuesta de opinión no puede contener claves de respuesta.' });
+  }
   const callResult = await pool.query(
     'CALL estadistica.usp_activar_encuesta($1, $2, NULL)',
     [survey.id, req.user.sub],
   );
-  if (!callResult.rows[0].p_ok) return res.status(400).json({ error: 'Agrega al menos una pregunta antes de activar la encuesta.' });
+  if (!callResult.rows[0].p_ok) return res.status(400).json({ error: 'Revisa el enfoque y las claves de respuesta antes de activar.' });
   return res.json({ id: survey.id, status: 'active' });
 }));
 
@@ -307,10 +499,20 @@ app.get('/api/respond/:token', asyncRoute(async (req, res) => {
     'SELECT * FROM estadistica.fn_preguntas_encuesta($1)',
     [invitation.survey_id],
   );
+  const mode = await pool.query(
+    `SELECT m.etiqueta AS mode_label, COALESCE(m.califica_respuestas, false) AS grades_answers
+     FROM estadistica.encuestas e
+     LEFT JOIN estadistica.modos_encuesta m ON m.codigo = e.modo_codigo
+     WHERE e.id = $1`,
+    [invitation.survey_id],
+  );
+  if (!mode.rows[0]) throw new Error('No se pudo recuperar el enfoque de la encuesta.');
   return res.json({
     surveyId: invitation.survey_id,
     title: invitation.title,
     description: invitation.description,
+    mode_label: mode.rows[0].mode_label,
+    grades_answers: mode.rows[0].grades_answers,
     questions: questions.rows,
   });
 }));
@@ -319,25 +521,68 @@ app.post('/api/respond/:token', asyncRoute(async (req, res) => {
   const input = validate(z.object({
     answers: z.array(z.object({
       questionId: z.string().uuid(),
-      value: z.number().finite(),
+      value: z.number().finite().nullable().optional(),
+      optionIds: z.array(z.string().uuid()).optional().default([]),
     })).min(1).max(500),
     deviceFingerprint: z.string().max(128).nullable().optional(),
   }), req.body);
+  const client = await pool.connect();
+  let response;
+  let grade;
+  let transactionStarted = false;
   try {
-    await pool.query('CALL estadistica.sp_registrar_respuesta($1, $2::jsonb, $3)', [
+    await client.query('BEGIN');
+    transactionStarted = true;
+    await client.query('CALL estadistica.sp_registrar_respuesta($1, $2::jsonb, $3)', [
       tokenHash(req.params.token),
-      JSON.stringify(input.answers.map(({ questionId, value }) => ({ pregunta_id: questionId, valor: value }))),
+      JSON.stringify(input.answers.map(({ questionId, value, optionIds }) => ({
+        pregunta_id: questionId,
+        valor: value ?? null,
+        opciones: optionIds,
+      }))),
       input.deviceFingerprint ?? null,
     ]);
+    const responseResult = await client.query(
+      'SELECT * FROM estadistica.fn_datos_respuesta_enviada($1)',
+      [tokenHash(req.params.token)],
+    );
+    response = responseResult.rows[0];
+    if (!response) throw new Error('No se pudo recuperar la respuesta recién registrada.');
+    const gradeResult = await client.query(
+      'SELECT * FROM estadistica.fn_calificar_respuesta($1)',
+      [tokenHash(req.params.token)],
+    );
+    const gradeRow = gradeResult.rows[0];
+    if (!gradeRow) throw new Error('No se pudo calcular el resultado de la respuesta.');
+    const modeResult = await client.query(
+      `SELECT m.etiqueta AS mode_label, COALESCE(m.califica_respuestas, false) AS grades_answers
+       FROM estadistica.codigos_encuesta c
+       JOIN estadistica.encuestas e ON e.id = c.encuesta_id
+       LEFT JOIN estadistica.modos_encuesta m ON m.codigo = e.modo_codigo
+       WHERE c.hash_token = $1`,
+      [tokenHash(req.params.token)],
+    );
+    if (!modeResult.rows[0]) throw new Error('No se pudo recuperar el enfoque de la respuesta.');
+    grade = {
+      show_result: gradeRow.mostrar_resultado,
+      reveal_correct_answers: gradeRow.revelar_respuestas_correctas,
+      grades_answers: modeResult.rows[0].grades_answers,
+      mode_label: modeResult.rows[0].mode_label,
+      score_percent: gradeRow.puntuacion_porcentual === null
+        ? null
+        : Number(gradeRow.puntuacion_porcentual),
+      graded_questions: Number(gradeRow.preguntas_calificadas),
+      questions: gradeRow.resultados,
+    };
+    await client.query('COMMIT');
+    transactionStarted = false;
   } catch (error) {
+    if (transactionStarted) await client.query('ROLLBACK');
     if (error.code === 'P0001') return res.status(409).json({ error: error.message.replaceAll('_', ' ') });
     throw error;
+  } finally {
+    client.release();
   }
-  const result = await pool.query(
-    'SELECT * FROM estadistica.fn_datos_respuesta_enviada($1)',
-    [tokenHash(req.params.token)],
-  );
-  const response = result.rows[0];
   io.to(`survey:${response.survey_id}`).emit('response:created', {
     surveyId: response.survey_id,
     responseCount: Number(response.response_count),
@@ -359,7 +604,7 @@ app.post('/api/respond/:token', asyncRoute(async (req, res) => {
       total: studyCounts.rows.reduce((sum, r) => sum + r.count, 0),
     });
   }
-  return res.status(201).json({ submitted: true });
+  return res.status(201).json({ submitted: true, result: grade });
 }));
 
 app.get('/api/surveys/:surveyId/report', authenticate, asyncRoute(async (req, res) => {
@@ -403,12 +648,15 @@ app.get('/api/surveys/:surveyId/report.pdf', authenticate, asyncRoute(async (req
   pdf.text(`Participantes: ${report.summary.participants_count} | Jurados: ${report.summary.judges_count} | Expositores: ${report.summary.exhibitors_count}`);
   for (const question of report.questions) {
     pdf.moveDown().fontSize(14).text(question.prompt);
-    pdf.fontSize(9).text(
-      `Universo: ${question.universe} | Media: ${question.mean ?? 'N/D'} | Mediana: ${question.median ?? 'N/D'} | Moda: ${question.mode ?? 'N/D'} | Rango: ${question.value_range ?? 'N/D'}`,
-    );
-    pdf.text(
-      `Mínimo: ${question.minimum ?? 'N/D'} | Máximo: ${question.maximum ?? 'N/D'} | CV: ${question.coefficient_of_variation ?? 'N/D'}% | Varianza: ${question.variance ?? 'N/D'} | Desviación estándar: ${question.standard_deviation ?? 'N/D'}`,
-    );
+    pdf.fontSize(9).text(`Tipo: ${question.questionTypeLabel} | Respuestas: ${question.universe}`);
+    if (question.isNumeric) {
+      pdf.text(
+        `Media: ${question.mean ?? 'N/D'} | Mediana: ${question.median ?? 'N/D'} | Moda: ${question.mode ?? 'N/D'} | Rango: ${question.value_range ?? 'N/D'}`,
+      );
+      pdf.text(
+        `Mínimo: ${question.minimum ?? 'N/D'} | Máximo: ${question.maximum ?? 'N/D'} | CV: ${question.coefficient_of_variation ?? 'N/D'}% | Varianza: ${question.variance ?? 'N/D'} | Desviación estándar: ${question.standard_deviation ?? 'N/D'}`,
+      );
+    }
     pdf.text('Tabla de frecuencias:');
     for (const row of question.frequencies) pdf.text(`${row.value}: ${row.frequency}`);
   }
@@ -449,8 +697,8 @@ app.post('/api/admin/grupos', authenticate, allowRoles('admin', 'superuser'), as
     orden: z.number().int().min(0).max(99).default(0),
   }), req.body);
   const r = await pool.query(
-    'CALL estadistica.usp_crear_grupo($1, $2, $3, $4, NULL, NULL)',
-    [input.nombre, input.etiqueta, input.icono, input.orden],
+    'CALL estadistica.usp_crear_grupo($1, $2, $3, $4, $5, NULL, NULL)',
+    [input.nombre, input.etiqueta, input.icono, input.orden, req.user.sub],
   );
   const row = r.rows[0];
   if (row.p_error) return res.status(400).json({ error: row.p_error });
@@ -465,8 +713,8 @@ app.put('/api/admin/grupos/:id', authenticate, allowRoles('admin', 'superuser'),
     activo: z.boolean().default(true),
   }), req.body);
   const r = await pool.query(
-    'CALL estadistica.usp_actualizar_grupo($1, $2, $3, $4, $5, NULL, NULL)',
-    [req.params.id, input.etiqueta, input.icono, input.orden, input.activo],
+    'CALL estadistica.usp_actualizar_grupo($1, $2, $3, $4, $5, $6, NULL, NULL)',
+    [req.params.id, input.etiqueta, input.icono, input.orden, input.activo, req.user.sub],
   );
   const row = r.rows[0];
   if (row.p_error) return res.status(400).json({ error: row.p_error });
@@ -475,8 +723,8 @@ app.put('/api/admin/grupos/:id', authenticate, allowRoles('admin', 'superuser'),
 
 app.delete('/api/admin/grupos/:id', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
   const r = await pool.query(
-    'CALL estadistica.usp_eliminar_grupo($1, NULL, NULL)',
-    [req.params.id],
+    'CALL estadistica.usp_eliminar_grupo($1, $2, NULL, NULL)',
+    [req.params.id, req.user.sub],
   );
   const row = r.rows[0];
   if (row.p_error) return res.status(400).json({ error: row.p_error });
@@ -488,14 +736,21 @@ app.post('/api/estudios', authenticate, allowRoles('admin', 'superuser'), asyncR
     title: z.string().trim().min(1).max(200),
     description: z.string().max(5000).default(''),
     shift: z.enum(['mañana', 'noche']),
+    modeCode: z.string().trim().min(1),
     date: z.string().optional(),
     groups: z.array(z.string()).optional(),
   }), req.body);
   const selectedGroups = input.groups?.length > 0 ? input.groups : null;
-  const callResult = await pool.query(
-    'CALL estadistica.usp_crear_estudio($1, $2, $3, $4, $5, $6, NULL)',
-    [input.title, input.description, input.shift, input.date ?? null, req.user.sub, selectedGroups],
-  );
+  let callResult;
+  try {
+    callResult = await pool.query(
+      'CALL estadistica.usp_crear_estudio($1, $2, $3, $4, $5, $6, $7, NULL)',
+      [input.title, input.description, input.shift, input.date ?? null, req.user.sub, selectedGroups, input.modeCode],
+    );
+  } catch (error) {
+    if (error.code === 'P0001') return res.status(400).json({ error: error.message.replaceAll('_', ' ') });
+    throw error;
+  }
   const studyId = callResult.rows[0].p_estudio_id;
   const studyResult = await pool.query(
     'SELECT * FROM estadistica.vw_estudios_lista WHERE id = $1',
@@ -512,7 +767,11 @@ app.get('/api/estudios/:studyId', authenticate, asyncRoute(async (req, res) => {
   if (!studyResult.rows[0]) return res.status(404).json({ error: 'Estudio no encontrado.' });
   const study = studyResult.rows[0];
   const surveysResult = await pool.query(
-    'SELECT * FROM estadistica.fn_encuestas_estudio($1)',
+    `SELECT s.*, e.modo_codigo AS mode_code, m.etiqueta AS mode_label
+     FROM estadistica.fn_encuestas_estudio($1) s
+     JOIN estadistica.encuestas e ON e.id = s.id
+     LEFT JOIN estadistica.modos_encuesta m ON m.codigo = e.modo_codigo
+     ORDER BY s.orden NULLS LAST`,
     [study.id],
   );
   const totalResponses = surveysResult.rows.reduce((sum, row) => sum + row.response_count, 0);

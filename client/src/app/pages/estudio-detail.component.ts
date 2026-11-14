@@ -47,6 +47,7 @@ import { StudyDetail, StudySurvey } from '../core/models';
               <span class="survey-status" [class.active]="survey.status === 'active'">
                 {{ surveyStatusLabel(survey.status) }}
               </span>
+              <small class="survey-mode">{{ survey.mode_label || 'Modo pendiente' }}</small>
               <a class="btn-survey" [routerLink]="['/encuestas', survey.id]">
                 Ver encuesta →
               </a>
@@ -119,6 +120,7 @@ import { StudyDetail, StudySurvey } from '../core/models';
     .group-actions { display:flex; align-items:center; justify-content:space-between; gap:.5rem; margin-top:auto; }
     .survey-status { font-size:.7rem; font-weight:700; color:#94a3b8; }
     .survey-status.active { color:#16a34a; }
+    .survey-mode { color:#64748b; font-size:.7rem; }
     .btn-survey {
       font-size:.78rem; font-weight:700; color:#185adb; text-decoration:none;
       padding:.35rem .75rem; border:1px solid #bfdbfe; border-radius:8px;

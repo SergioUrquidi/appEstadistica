@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
-import { Question, SurveyDetail, SurveyReport } from '../core/models';
+import { Question, QuestionType, SurveyDetail, SurveyMode, SurveyReport } from '../core/models';
 import { SocketService } from '../core/socket.service';
 import { ButtonComponent } from '../shared/button.component';
 
@@ -12,6 +12,11 @@ interface Invitation {
   group: string;
   url: string;
   qrCode: string;
+}
+
+interface OptionDraft {
+  label: string;
+  isCorrect: boolean;
 }
 
 @Component({
@@ -22,34 +27,124 @@ interface Invitation {
     @if (survey) {
       <a class="back-link" routerLink="/encuestas">← Todas las encuestas</a>
       <header class="page-head">
-        <div><p class="eyebrow">{{ statusLabel(survey.status) }}</p><h1>{{ survey.title }}</h1><p class="muted">{{ survey.description || 'Estudio cuantitativo' }}</p></div>
+        <div><p class="eyebrow">{{ statusLabel(survey.status) }} · {{ survey.mode_label || 'Modo pendiente' }}</p><h1>{{ survey.title }}</h1><p class="muted">{{ survey.description || survey.mode_description || 'Formulario de encuesta' }}</p></div>
         @if (survey.status === 'draft') {
-          <app-button (click)="activate()" [disabled]="busy || !survey.questions.length">Activar encuesta</app-button>
+          <app-button (click)="activate()" [disabled]="busy || !canActivate">Activar encuesta</app-button>
         }
       </header>
 
       @if (survey.status === 'draft') {
-        <section class="panel">
-          <div class="section-title"><div><h2>Preguntas</h2><p class="muted">Por ahora se admiten preguntas con respuesta numérica.</p></div></div>
-          <ol class="question-list">
-            @for (question of survey.questions; track question.id) {
-              <li><span class="number">{{ question.position }}</span><div><strong>{{ question.prompt }}</strong><small>{{ rangeLabel(question) }}</small></div></li>
-            }
-          </ol>
-          <form class="question-form" (ngSubmit)="addQuestion()">
+        @if (!survey.mode_code) {
+          <section class="panel">
+            <h2>Define el enfoque de esta encuesta</h2>
+            <p class="muted">Las encuestas anteriores no se clasifican automáticamente. Elige un solo camino antes de continuar.</p>
+            <form class="mode-form" (ngSubmit)="defineSurveyMode()">
+              <label>Enfoque
+                <select name="legacyModeCode" [(ngModel)]="modeCodeDraft" required>
+                  <option value="" disabled>Selecciona el enfoque</option>
+                  @for (mode of surveyModes; track mode.code) {
+                    <option [value]="mode.code">{{ mode.label }}</option>
+                  }
+                </select>
+              </label>
+              @if (selectedSurveyMode) { <p class="muted wide">{{ selectedSurveyMode.description }}</p> }
+              @if (error) { <p class="error wide" role="alert">{{ error }}</p> }
+              <app-button type="submit" variant="secondary" [disabled]="busy || !modeCodeDraft">Confirmar enfoque</app-button>
+            </form>
+          </section>
+        } @else {
+          <section class="panel">
+            <div class="section-title"><div><h2>Preguntas</h2><p class="muted">{{ survey.mode_description }}</p></div></div>
+            <ol class="question-list">
+              @for (question of survey.questions; track question.id) {
+                <li>
+                  <span class="number">{{ question.position }}</span>
+                  <div class="question-content">
+                    <strong>{{ question.prompt }}</strong><small>{{ questionSummary(question) }}</small>
+                    @if (survey.requires_correct_answer) {
+                      <form class="key-form" (ngSubmit)="saveQuestionKey(question)">
+                        @if (question.is_numeric) {
+                          <label>Respuesta correcta exacta
+                            <input [name]="'key-' + question.id" type="number" step="any" [(ngModel)]="question.correct_value" required>
+                          </label>
+                        } @else {
+                          <fieldset>
+                            <legend>Marca la clave correcta</legend>
+                            @for (option of question.options; track option.id; let i = $index) {
+                              <label class="correct-option">
+                                <input
+                                  [type]="question.allows_multiple ? 'checkbox' : 'radio'"
+                                  [name]="'key-option-' + question.id"
+                                  [checked]="option.is_correct"
+                                  (change)="setExistingOptionCorrect(question, i, $event)">
+                                <span>{{ option.label }}</span>
+                              </label>
+                            }
+                          </fieldset>
+                        }
+                        <app-button type="submit" variant="secondary" [disabled]="busy">Guardar clave</app-button>
+                      </form>
+                    }
+                  </div>
+                </li>
+              }
+            </ol>
+            <form class="question-form" (ngSubmit)="addQuestion()">
             <label class="wide">Pregunta
               <input name="prompt" [(ngModel)]="prompt" maxlength="1000" placeholder="Ej. ¿Cuántas horas estudió esta semana?" required>
             </label>
-            <label>Valor mínimo (opcional)
-              <input name="minValue" type="number" step="any" [(ngModel)]="minValue">
+            <label class="wide">Tipo de respuesta
+              <select name="questionType" [(ngModel)]="questionType" (ngModelChange)="onQuestionTypeChange()" required>
+                @for (type of questionTypes; track type.code) {
+                  <option [value]="type.code">{{ type.label }}</option>
+                }
+              </select>
             </label>
-            <label>Valor máximo (opcional)
-              <input name="maxValue" type="number" step="any" [(ngModel)]="maxValue">
-            </label>
+            @if (selectedQuestionType?.is_numeric) {
+              <label>Valor mínimo (opcional)
+                <input name="minValue" type="number" step="any" [(ngModel)]="minValue">
+              </label>
+              <label>Valor máximo (opcional)
+                <input name="maxValue" type="number" step="any" [(ngModel)]="maxValue">
+              </label>
+              @if (survey.requires_correct_answer) {
+                <label class="wide">Respuesta correcta (valor exacto)
+                  <input name="correctValue" type="number" step="any" [(ngModel)]="correctValue" required>
+                </label>
+              }
+            } @else if (selectedQuestionType && selectedQuestionType.min_options > 0) {
+              <div class="wide option-editor">
+                <strong>{{ survey.requires_correct_answer ? 'Alternativas y clave de respuesta' : 'Alternativas' }}</strong>
+                @for (option of optionDrafts; track $index; let i = $index) {
+                  <div class="option-field">
+                    <label [for]="'option-' + i">Alternativa {{ i + 1 }}</label>
+                    <div class="option-row">
+                      <input [id]="'option-' + i" [name]="'option-' + i" [(ngModel)]="option.label" maxlength="300" required>
+                      @if (survey.requires_correct_answer) {
+                        <label class="correct-option">
+                          <input
+                            [type]="selectedQuestionType.allows_multiple ? 'checkbox' : 'radio'"
+                            [name]="'correct-option-' + questionType"
+                            [checked]="option.isCorrect"
+                            (change)="setOptionCorrect(i, $event)">
+                          <span>Correcta</span>
+                        </label>
+                      }
+                      @if (optionDrafts.length > selectedQuestionType.min_options) {
+                        <button type="button" class="remove-option" (click)="removeOption(i)">Quitar</button>
+                      }
+                    </div>
+                  </div>
+                }
+                <button type="button" class="add-option" (click)="addOption()">Agregar alternativa</button>
+                <small>El participante podrá {{ selectedQuestionType.allows_multiple ? 'marcar varias' : 'elegir una' }}.</small>
+              </div>
+            }
             @if (error) { <p class="error wide" role="alert">{{ error }}</p> }
-            <app-button type="submit" variant="secondary" class="wide" [disabled]="busy">Agregar pregunta</app-button>
+            <app-button type="submit" variant="secondary" class="wide" [disabled]="busy || !selectedQuestionType">Agregar pregunta</app-button>
           </form>
         </section>
+        }
       } @else {
         <div class="dashboard-grid">
           <section class="panel metrics">
@@ -96,18 +191,22 @@ interface Invitation {
           @for (question of report?.questions ?? []; track question.questionId) {
             <article class="result">
               <h3>{{ question.prompt }}</h3>
-              <div class="stat-grid">
-                <div><small>Universo</small><strong>{{ question.universe }}</strong></div>
-                <div><small>Media</small><strong>{{ format(question.mean) }}</strong></div>
-                <div><small>Mediana</small><strong>{{ format(question.median) }}</strong></div>
-                <div><small>Moda</small><strong>{{ format(question.mode) }}</strong></div>
-                <div><small>Rango</small><strong>{{ format(question.value_range) }}</strong></div>
-                <div><small>Mínimo</small><strong>{{ format(question.minimum) }}</strong></div>
-                <div><small>Máximo</small><strong>{{ format(question.maximum) }}</strong></div>
-                <div><small>CV</small><strong>{{ format(question.coefficient_of_variation, '%') }}</strong></div>
-                <div><small>Varianza</small><strong>{{ format(question.variance) }}</strong></div>
-                <div><small>Desv. estándar</small><strong>{{ format(question.standard_deviation) }}</strong></div>
-              </div>
+              @if (question.isNumeric) {
+                <div class="stat-grid">
+                  <div><small>Universo</small><strong>{{ question.universe }}</strong></div>
+                  <div><small>Media</small><strong>{{ format(question.mean) }}</strong></div>
+                  <div><small>Mediana</small><strong>{{ format(question.median) }}</strong></div>
+                  <div><small>Moda</small><strong>{{ format(question.mode) }}</strong></div>
+                  <div><small>Rango</small><strong>{{ format(question.value_range) }}</strong></div>
+                  <div><small>Mínimo</small><strong>{{ format(question.minimum) }}</strong></div>
+                  <div><small>Máximo</small><strong>{{ format(question.maximum) }}</strong></div>
+                  <div><small>CV</small><strong>{{ format(question.coefficient_of_variation, '%') }}</strong></div>
+                  <div><small>Varianza</small><strong>{{ format(question.variance) }}</strong></div>
+                  <div><small>Desv. estándar</small><strong>{{ format(question.standard_deviation) }}</strong></div>
+                </div>
+              } @else {
+                <p class="muted">{{ question.questionTypeLabel }} · {{ question.universe }} respuestas</p>
+              }
               <h4>Tabla de frecuencias</h4>
               @if (question.frequencies.length) {
                 <svg class="freq-chart" [attr.viewBox]="'0 0 480 ' + chartHeight(question)" width="100%" [attr.height]="chartHeight(question)" role="img" aria-label="Distribución de frecuencias">
@@ -149,6 +248,19 @@ interface Invitation {
     .question-list { display:grid; gap:.7rem; padding:0; list-style:none; }
     .question-list li { display:flex; align-items:start; gap:.75rem; padding:.75rem; border:1px solid #edf0f5; border-radius:10px; }
     .question-list small { display:block; margin-top:.25rem; }
+    .question-content { display:grid; gap:.3rem; min-width:0; }
+    .mode-form { display:grid; grid-template-columns:minmax(220px,1fr) auto; gap:.8rem; align-items:end; }
+    .mode-form .wide { grid-column:1/-1; }
+    .key-form { display:grid; gap:.55rem; margin:.6rem 0 1rem; padding:.75rem; background:#f8fafc; border-radius:9px; }
+    .key-form fieldset { display:grid; gap:.45rem; border:0; padding:0; }
+    .key-form legend { margin-bottom:.35rem; font-size:.85rem; font-weight:700; }
+    .option-editor { display:grid; gap:.65rem; }
+    .option-row { display:flex; gap:.5rem; }
+    .option-field { display:grid; gap:.4rem; }
+    .correct-option { display:flex; align-items:center; gap:.35rem; white-space:nowrap; }
+    .correct-option input { width:auto; }
+    .remove-option,.add-option { padding:.55rem .75rem; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#334155; font:inherit; cursor:pointer; }
+    .add-option { justify-self:start; }
     .number { display:grid; place-items:center; min-width:1.6rem; height:1.6rem; border-radius:50%; color:#185adb; background:#e9f0ff; font-weight:800; }
     .question-form,.invite-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.8rem; margin-top:1rem; }
     label { display:grid; gap:.4rem; color:#334155; font-size:.86rem; font-weight:700; }
@@ -180,15 +292,21 @@ interface Invitation {
     .error { color:#b42318; }
     .empty-note { padding:1rem; color:#64748b; background:#f8fafc; border-radius:9px; }
     @media(max-width:760px) { .dashboard-grid { grid-template-columns:1fr; } }
-    @media(max-width:560px) { .question-form,.invite-form { grid-template-columns:1fr; } .page-head { align-items:start; flex-direction:column; } .page-head app-button { width:100%; } .save-row { align-items:end; flex-wrap:wrap; } }
+    @media(max-width:560px) { .question-form,.invite-form,.mode-form { grid-template-columns:1fr; } .page-head { align-items:start; flex-direction:column; } .page-head app-button { width:100%; } .save-row { align-items:end; flex-wrap:wrap; } }
   `],
 })
 export class SurveyDetailComponent implements OnInit, OnDestroy {
   survey: SurveyDetail | null = null;
   report: SurveyReport | null = null;
+  questionTypes: QuestionType[] = [];
+  surveyModes: SurveyMode[] = [];
+  modeCodeDraft = '';
   prompt = '';
+  questionType = '';
+  optionDrafts: OptionDraft[] = [];
   minValue: number | null = null;
   maxValue: number | null = null;
+  correctValue: number | null = null;
   group = 'participants';
   inviteCount = 1;
   invitations: Invitation[] = [];
@@ -211,6 +329,15 @@ export class SurveyDetailComponent implements OnInit, OnDestroy {
     this.surveyId = this.route.snapshot.paramMap.get('id') ?? '';
     try {
       this.survey = await firstValueFrom(this.http.get<SurveyDetail>(`/api/surveys/${this.surveyId}`));
+      if (this.survey.status === 'draft') {
+        [this.questionTypes, this.surveyModes] = await Promise.all([
+          firstValueFrom(this.http.get<QuestionType[]>('/api/question-types')),
+          firstValueFrom(this.http.get<SurveyMode[]>('/api/survey-modes')),
+        ]);
+        this.modeCodeDraft = this.survey.mode_code ?? '';
+        this.questionType = this.questionTypes[0]?.code ?? '';
+        this.onQuestionTypeChange();
+      }
       if (this.survey.status === 'active') {
         await Promise.all([this.loadReport(), this.loadAnalysis()]);
         this.stopWatching = this.sockets.watchSurvey(this.surveyId, () => void this.loadReport());
@@ -222,25 +349,126 @@ export class SurveyDetailComponent implements OnInit, OnDestroy {
     }
   }
 
+  async defineSurveyMode(): Promise<void> {
+    if (!this.modeCodeDraft || !this.survey || this.survey.mode_code) return;
+    this.busy = true;
+    this.error = '';
+    try {
+      const mode = await firstValueFrom(this.http.put<SurveyMode & { code: string }>(
+        `/api/surveys/${this.surveyId}/mode`,
+        { modeCode: this.modeCodeDraft },
+      ));
+      this.survey.mode_code = mode.code;
+      this.survey.mode_label = mode.label;
+      this.survey.mode_description = mode.description;
+      this.survey.requires_correct_answer = mode.requires_correct_answer;
+      this.survey.grades_answers = mode.grades_answers;
+    } catch {
+      this.error = 'No se pudo definir el enfoque. Revisa si la encuesta ya tiene claves configuradas.';
+    } finally {
+      this.busy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async saveQuestionKey(question: Question): Promise<void> {
+    if (!this.survey?.requires_correct_answer) return;
+    const optionIds = question.options.filter((option) => option.is_correct).map((option) => option.id);
+    if (question.is_numeric && (question.correct_value === null || question.correct_value === undefined)) {
+      this.error = 'Indica la respuesta numérica correcta.';
+      return;
+    }
+    if (!question.is_numeric
+        && (optionIds.length === 0 || (!question.allows_multiple && optionIds.length !== 1))) {
+      this.error = question.allows_multiple
+        ? 'Marca al menos una alternativa correcta.'
+        : 'Marca exactamente una alternativa correcta.';
+      return;
+    }
+    this.busy = true;
+    this.error = '';
+    try {
+      const updated = await firstValueFrom(this.http.put<Question>(
+        `/api/surveys/${this.surveyId}/questions/${question.id}/answer-key`,
+        {
+          correctValue: question.is_numeric ? question.correct_value : null,
+          optionIds,
+        },
+      ));
+      this.survey.questions = this.survey.questions.map((item) => item.id === updated.id ? updated : item);
+    } catch {
+      this.error = 'No se pudo guardar la clave de esta pregunta.';
+    } finally {
+      this.busy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
   ngOnDestroy(): void {
     this.stopWatching?.();
   }
 
   async addQuestion(): Promise<void> {
     if (!this.survey || !this.prompt.trim()) return;
+    const type = this.selectedQuestionType;
+    if (!type) {
+      this.error = 'No hay tipos de pregunta disponibles en la base de datos.';
+      return;
+    }
+    if (this.survey.requires_correct_answer && type.is_numeric
+        && (this.correctValue === null || !Number.isFinite(this.correctValue))) {
+      this.error = 'Indica el valor numérico correcto.';
+      return;
+    }
+    if (this.survey.requires_correct_answer && type.is_numeric
+        && ((this.minValue !== null && this.correctValue! < this.minValue)
+          || (this.maxValue !== null && this.correctValue! > this.maxValue))) {
+      this.error = 'La respuesta correcta debe estar dentro de los límites de la pregunta.';
+      return;
+    }
+    const options = type.min_options > 0
+      ? this.optionDrafts.map(({ label, isCorrect }) => ({
+        label: label.trim(),
+        is_correct: isCorrect,
+      })).filter((option) => option.label)
+      : [];
+    if (options.length < type.min_options) {
+      this.error = `Agrega al menos ${type.min_options} alternativas.`;
+      return;
+    }
+    const correctOptions = options.filter((option) => option.is_correct).length;
+    if (this.survey.requires_correct_answer && type.min_options > 0
+        && (correctOptions === 0 || (!type.allows_multiple && correctOptions !== 1))) {
+      this.error = type.allows_multiple
+        ? 'Marca al menos una alternativa correcta.'
+        : 'Marca exactamente una alternativa correcta.';
+      return;
+    }
     this.busy = true;
     this.error = '';
     try {
       const question = await firstValueFrom(this.http.post<Question>(
         `/api/surveys/${this.surveyId}/questions`,
-        { prompt: this.prompt.trim(), minValue: this.minValue, maxValue: this.maxValue },
+        {
+          prompt: this.prompt.trim(),
+          questionType: type.code,
+          options: options.map((option) => ({
+            ...option,
+            is_correct: this.survey?.requires_correct_answer ? option.is_correct : false,
+          })),
+          minValue: type.is_numeric ? this.minValue : null,
+          maxValue: type.is_numeric ? this.maxValue : null,
+          correctValue: this.survey.requires_correct_answer && type.is_numeric ? this.correctValue : null,
+        },
       ));
       this.survey.questions = [...this.survey.questions, question];
       this.prompt = '';
       this.minValue = null;
       this.maxValue = null;
+      this.correctValue = null;
+      this.optionDrafts = Array.from({ length: type.min_options }, () => ({ label: '', isCorrect: false }));
     } catch {
-      this.error = 'No se pudo agregar la pregunta. Comprueba los límites numéricos.';
+      this.error = 'No se pudo agregar la pregunta. Revisa el tipo y sus alternativas.';
     } finally {
       this.busy = false;
       this.cdr.markForCheck();
@@ -350,9 +578,87 @@ export class SurveyDetailComponent implements OnInit, OnDestroy {
     return status === 'active' ? 'Encuesta activa' : status === 'closed' ? 'Encuesta cerrada' : 'Borrador';
   }
 
-  rangeLabel(question: Question): string {
-    if (question.min_value === null && question.max_value === null) return 'Respuesta numérica';
-    return `Rango: ${question.min_value ?? 'sin mínimo'} a ${question.max_value ?? 'sin máximo'}`;
+  get canActivate(): boolean {
+    if (!this.survey?.mode_code || !this.survey.questions.length) return false;
+    if (!this.survey.requires_correct_answer) return true;
+    return this.survey.questions.every((question) => question.is_numeric
+      ? question.correct_value !== null && question.correct_value !== undefined
+      : question.options.some((option) => option.is_correct));
+  }
+
+  get selectedSurveyMode(): SurveyMode | null {
+    return this.surveyModes.find((mode) => mode.code === this.modeCodeDraft) ?? null;
+  }
+
+  get selectedQuestionType(): QuestionType | null {
+    return this.questionTypes.find((type) => type.code === this.questionType) ?? null;
+  }
+
+  onQuestionTypeChange(): void {
+    const type = this.selectedQuestionType;
+    if (!type?.is_numeric) {
+      this.minValue = null;
+      this.maxValue = null;
+    }
+    if (type && !type.allows_multiple) {
+      let foundCorrect = false;
+      this.optionDrafts = this.optionDrafts.map((option) => {
+        const keepCorrect = option.isCorrect && !foundCorrect;
+        if (keepCorrect) foundCorrect = true;
+        return { ...option, isCorrect: keepCorrect };
+      });
+    }
+    while (type && this.optionDrafts.length < type.min_options) {
+      this.optionDrafts.push({ label: '', isCorrect: false });
+    }
+  }
+
+  addOption(): void {
+    this.optionDrafts = [...this.optionDrafts, { label: '', isCorrect: false }];
+  }
+
+  removeOption(index: number): void {
+    this.optionDrafts = this.optionDrafts.filter((_, optionIndex) => optionIndex !== index);
+  }
+
+  setOptionCorrect(index: number, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.optionDrafts = this.optionDrafts.map((option, optionIndex) => ({
+      ...option,
+      isCorrect: optionIndex === index
+        ? checked
+        : this.selectedQuestionType?.allows_multiple ? option.isCorrect : false,
+    }));
+  }
+
+  setExistingOptionCorrect(question: Question, index: number, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    question.options = question.options.map((option, optionIndex) => ({
+      ...option,
+      is_correct: optionIndex === index
+        ? checked
+        : question.allows_multiple ? option.is_correct : false,
+    }));
+  }
+
+  questionSummary(question: Question): string {
+    if (question.is_numeric) {
+      if (!this.survey?.requires_correct_answer) return question.question_type_label;
+      const bounds = question.min_value === null && question.max_value === null
+        ? ''
+        : `; rango ${question.min_value ?? 'sin mínimo'} a ${question.max_value ?? 'sin máximo'}`;
+      const key = question.correct_value === null || question.correct_value === undefined
+        ? 'sin clave de respuesta'
+        : `respuesta correcta: ${question.correct_value}`;
+      return `${question.question_type_label}; ${key}${bounds}`;
+    }
+    if (!this.survey?.requires_correct_answer) {
+      return `${question.question_type_label}: ${question.options.map((option) => option.label).join(', ')}`;
+    }
+    const options = question.options.map((option) =>
+      `${option.label}${option.is_correct ? ' (correcta)' : ''}`).join(', ');
+    const hasKey = question.options.some((option) => option.is_correct);
+    return `${question.question_type_label}; ${hasKey ? options : `sin clave de respuesta: ${options}`}`;
   }
 
   groupLabel(group: string): string {

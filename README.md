@@ -47,7 +47,13 @@ la API.
 
 - Roles `superuser`, `admin` y `user`; cada usuario regular administra sus
   encuestas, y admin/superusuario pueden consultar todas.
-- Encuestas con preguntas numéricas, límites opcionales y estados borrador/activa.
+- Encuestas de opinión y pruebas de conocimiento, con preguntas numéricas, de
+  selección única o múltiple y límites numéricos opcionales. En opinión no se
+  definen respuestas correctas ni se calcula puntaje; en conocimiento se
+  configura una clave y se califica automáticamente.
+- Las ferias asignan el enfoque seleccionado a todas las encuestas de sus
+  grupos. Las encuestas preexistentes sin enfoque requieren clasificación
+  explícita antes de continuar.
 - Invitaciones QR separadas por participantes, jurados y expositores. El QR
   contiene un token aleatorio de un solo uso; se almacena únicamente su hash.
   No se usa IMEI, porque un navegador web no puede leerlo de manera fiable.
@@ -64,22 +70,41 @@ la API.
 
 ## Modelo entidad-relación y objetos PostgreSQL
 
-El diagrama se encuentra en [database/modelo-entidad-relacion.md](./database/modelo-entidad-relacion.md).
-Las tablas `usuarios`, `encuestas`, `preguntas`, `codigos_encuesta`,
-`respuestas`, `respuestas_numericas` y `borradores_analisis` están relacionadas
-mediante claves foráneas, restricciones únicas y reglas de integridad.
+Las tablas `usuarios`, `encuestas`, `preguntas`, `tipos_pregunta`,
+`opciones_pregunta`, `codigos_encuesta`, `respuestas`, `respuestas_numericas`,
+`respuestas_opciones` y `borradores_analisis` están relacionadas mediante
+claves foráneas, restricciones únicas y reglas de integridad.
 
-La base incluye:
+Los tipos de pregunta y los enfoques disponibles se consultan desde PostgreSQL.
+Las alternativas de selección única o múltiple se almacenan por pregunta en
+`opciones_pregunta`; las selecciones recibidas se guardan en
+`respuestas_opciones`. Solo las pruebas de conocimiento usan claves guardadas
+en `preguntas.valor_correcto` o `opciones_pregunta.es_correcta`; no se exponen
+antes de enviar una respuesta. La calificación numérica es exacta, la selección
+múltiple otorga crédito proporcional a las alternativas correctas elegidas y
+el resultado es el promedio porcentual de las preguntas con clave configurada.
+Las encuestas de opinión se analizan estadísticamente sin definir claves ni
+generar puntaje.
 
-- Vista `estadistica.vista_resumen_respuestas`.
+La base incluye las vistas `estadistica.vista_resumen_respuestas`,
+`estadistica.vw_estudios_lista`, `estadistica.vw_grupos_activos` y
+`estadistica.vw_usuarios`.
+
+También incluye:
+
 - Función `estadistica.fn_estadisticas_pregunta_numerica`.
+- Funciones de frecuencias para respuestas numéricas y alternativas.
+- Función `estadistica.fn_calificar_respuesta`, con resultado posterior al envío.
 - Procedimiento `estadistica.sp_registrar_respuesta`.
+- Procedimientos para crear y administrar encuestas, preguntas, grupos,
+  estudios, usuarios e invitaciones.
 - Funciones de auditoría y actualización automática de `actualizado_en`.
-- Índices con nombres en español para búsquedas, relaciones y auditoría.
-- Columnas `creado_en`, `actualizado_en`, `creado_por` y `actualizado_por` en
-  las entidades operativas, además de `estadistica.auditoria_general`, que
-  registra operación, usuario y valores anteriores/nuevos. La auditoría no
-  almacena hashes de contraseñas.
+- Índices definidos para búsquedas, unicidad y consultas de auditoría.
+- Disparadores de auditoría en las entidades operativas, incluida la gestión
+  de estudios y grupos. `estadistica.auditoria_general` registra operación,
+  usuario y valores anteriores/nuevos; no almacena hashes de contraseñas.
+- Campos de creación y actualización según cada entidad, con sus respectivas
+  claves foráneas y restricciones.
 
 Los usuarios adicionales se crean desde la administración de la aplicación;
 no hay registro público de cuentas.
