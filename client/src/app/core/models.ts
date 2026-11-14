@@ -44,6 +44,42 @@ export interface ReportQuestion {
   frequencies: { value: number; frequency: number }[];
 }
 
+export interface Group {
+  id: string;
+  nombre: string;
+  etiqueta: string;
+  icono: string;
+  orden: number;
+  activo: boolean;
+}
+
+export interface StudySurvey {
+  id: string;
+  title: string;
+  group: string;
+  etiqueta: string;
+  icono: string;
+  orden: number;
+  status: 'draft' | 'active' | 'closed';
+  response_count: number;
+}
+
+export interface Study {
+  id: string;
+  title: string;
+  description: string;
+  shift: 'mañana' | 'noche';
+  date: string | null;
+  status: 'borrador' | 'activo' | 'cerrado';
+  created_at: string;
+  response_count?: number;
+}
+
+export interface StudyDetail extends Study {
+  surveys: StudySurvey[];
+  totalResponses: number;
+}
+
 export interface SurveyReport {
   survey: Survey;
   summary: {

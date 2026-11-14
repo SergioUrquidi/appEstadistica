@@ -88,14 +88,7 @@ function allowRoles(...allowedRoles) {
 
 async function findSurveyForUser(surveyId, user) {
   const result = await pool.query(
-    `SELECT id, usuario_creador_id AS creator_id, titulo AS title, descripcion AS description,
-            CASE estado::text
-              WHEN 'borrador' THEN 'draft'
-              WHEN 'activa' THEN 'active'
-              WHEN 'cerrada' THEN 'closed'
-            END AS status,
-            creado_en AS created_at, actualizado_en AS updated_at
-     FROM estadistica.encuestas WHERE id = $1`,
+    'SELECT * FROM estadistica.fn_encuesta_por_id($1)',
     [surveyId],
   );
   const survey = result.rows[0];
@@ -115,8 +108,7 @@ async function buildReport(survey) {
     [survey.id],
   );
   const questions = await pool.query(
-    `SELECT id, pregunta AS prompt FROM estadistica.preguntas
-     WHERE encuesta_id = $1 ORDER BY posicion`,
+    'SELECT * FROM estadistica.fn_preguntas_encuesta($1)',
     [survey.id],
   );
   const statistics = [];
@@ -131,9 +123,7 @@ async function buildReport(survey) {
         [question.id],
       ),
       pool.query(
-        `SELECT valor AS value, count(*)::bigint AS frequency
-         FROM estadistica.respuestas_numericas WHERE pregunta_id = $1
-         GROUP BY valor ORDER BY valor`,
+        'SELECT * FROM estadistica.fn_frecuencias_pregunta($1)',
         [question.id],
       ),
     ]);
@@ -165,12 +155,7 @@ app.post('/api/auth/login', asyncRoute(async (req, res) => {
     password: z.string().min(1).max(200),
   }), req.body);
   const result = await pool.query(
-    `SELECT id, correo AS email, hash_contrasena AS password_hash,
-            nombre_visible AS display_name,
-            CASE rol::text WHEN 'superusuario' THEN 'superuser'
-                           WHEN 'administrador' THEN 'admin'
-                           WHEN 'usuario' THEN 'user' END AS role
-     FROM estadistica.usuarios WHERE correo = lower($1)`,
+    'SELECT * FROM estadistica.fn_autenticar_usuario($1)',
     [input.email],
   );
   const user = result.rows[0];
@@ -183,11 +168,7 @@ app.post('/api/auth/login', asyncRoute(async (req, res) => {
 
 app.get('/api/me', authenticate, asyncRoute(async (req, res) => {
   const result = await pool.query(
-    `SELECT id, correo AS email, nombre_visible AS display_name,
-            CASE rol::text WHEN 'superusuario' THEN 'superuser'
-                           WHEN 'administrador' THEN 'admin'
-                           WHEN 'usuario' THEN 'user' END AS role
-     FROM estadistica.usuarios WHERE id = $1`,
+    'SELECT * FROM estadistica.vw_usuarios WHERE id = $1',
     [req.user.sub],
   );
   if (!result.rows[0]) return res.status(401).json({ error: 'La cuenta ya no existe.' });
@@ -196,14 +177,7 @@ app.get('/api/me', authenticate, asyncRoute(async (req, res) => {
 
 app.get('/api/users', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
   const result = await pool.query(
-    `SELECT id, correo AS email, nombre_visible AS display_name,
-            CASE rol::text WHEN 'superusuario' THEN 'superuser'
-                           WHEN 'administrador' THEN 'admin'
-                           WHEN 'usuario' THEN 'user' END AS role,
-            creado_en AS created_at
-     FROM estadistica.usuarios
-     WHERE $1::boolean OR rol <> 'superusuario'
-     ORDER BY creado_en DESC`,
+    'SELECT * FROM estadistica.fn_listar_usuarios($1)',
     [req.user.role === 'superuser'],
   );
   return res.json(result.rows);
@@ -221,18 +195,12 @@ app.post('/api/users', authenticate, allowRoles('admin', 'superuser'), asyncRout
   }
   const passwordHash = await bcrypt.hash(input.password, 12);
   try {
-    const result = await pool.query(
-      `INSERT INTO estadistica.usuarios
-         (correo, hash_contrasena, nombre_visible, rol, creado_por)
-       VALUES (lower($1), $2, $3, $4::estadistica.rol_usuario, $5)
-       RETURNING id, correo AS email, nombre_visible AS display_name,
-                 CASE rol::text WHEN 'superusuario' THEN 'superuser'
-                                WHEN 'administrador' THEN 'admin'
-                                WHEN 'usuario' THEN 'user' END AS role,
-                 creado_en AS created_at`,
+    const callResult = await pool.query(
+      'CALL estadistica.usp_crear_usuario($1, $2, $3, $4::estadistica.rol_usuario, $5, NULL, NULL, NULL, NULL, NULL)',
       [input.email, passwordHash, input.displayName, databaseRoles[input.role], req.user.sub],
     );
-    return res.status(201).json(result.rows[0]);
+    const r = callResult.rows[0];
+    return res.status(201).json({ id: r.p_id, email: r.p_email, display_name: r.p_display_name, role: r.p_role, created_at: r.p_created_at });
   } catch (error) {
     if (error.code === '23505') return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
     throw error;
@@ -241,17 +209,8 @@ app.post('/api/users', authenticate, allowRoles('admin', 'superuser'), asyncRout
 
 app.get('/api/surveys', authenticate, asyncRoute(async (req, res) => {
   const result = await pool.query(
-    `SELECT s.id, s.titulo AS title, s.descripcion AS description,
-            CASE s.estado::text WHEN 'borrador' THEN 'draft'
-                                WHEN 'activa' THEN 'active'
-                                WHEN 'cerrada' THEN 'closed' END AS status,
-            s.creado_en AS created_at,
-            COALESCE(summary.cantidad_respuestas, 0) AS response_count
-     FROM estadistica.encuestas s
-     LEFT JOIN estadistica.vista_resumen_respuestas summary ON summary.encuesta_id = s.id
-     WHERE $1::boolean OR s.usuario_creador_id = $2
-     ORDER BY s.creado_en DESC`,
-    [['admin', 'superuser'].includes(req.user.role), req.user.sub],
+    'SELECT * FROM estadistica.fn_encuestas_usuario($1, $2)',
+    [req.user.sub, ['admin', 'superuser'].includes(req.user.role)],
   );
   return res.json(result.rows);
 }));
@@ -261,23 +220,18 @@ app.post('/api/surveys', authenticate, asyncRoute(async (req, res) => {
     title: z.string().trim().min(1).max(200),
     description: z.string().max(5000).default(''),
   }), req.body);
-  const result = await pool.query(
-    `INSERT INTO estadistica.encuestas (usuario_creador_id, titulo, descripcion)
-     VALUES ($1, $2, $3)
-     RETURNING id, titulo AS title, descripcion AS description,
-               'draft' AS status, creado_en AS created_at`,
-    [req.user.sub, input.title, input.description],
+  const callResult = await pool.query(
+    'CALL estadistica.usp_crear_encuesta($1, $2, $3, NULL, NULL)',
+    [input.title, input.description, req.user.sub],
   );
-  return res.status(201).json(result.rows[0]);
+  return res.status(201).json({ id: callResult.rows[0].p_id, title: input.title, description: input.description, status: 'draft', created_at: callResult.rows[0].p_created_at });
 }));
 
 app.get('/api/surveys/:surveyId', authenticate, asyncRoute(async (req, res) => {
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
   const questions = await pool.query(
-    `SELECT id, posicion AS position, pregunta AS prompt,
-            valor_minimo AS min_value, valor_maximo AS max_value
-     FROM estadistica.preguntas WHERE encuesta_id = $1 ORDER BY posicion`,
+    'SELECT * FROM estadistica.fn_preguntas_encuesta($1)',
     [survey.id],
   );
   return res.json({ ...survey, questions: questions.rows });
@@ -294,34 +248,24 @@ app.post('/api/surveys/:surveyId/questions', authenticate, asyncRoute(async (req
   }).refine((value) =>
     value.minValue === null || value.maxValue === null || value.minValue <= value.maxValue,
   ), req.body);
-  const positionResult = await pool.query(
-    'SELECT COALESCE(max(posicion), 0) + 1 AS position FROM estadistica.preguntas WHERE encuesta_id = $1',
-    [survey.id],
+  const callResult = await pool.query(
+    'CALL estadistica.usp_agregar_pregunta($1, $2, $3, $4, $5, NULL, NULL, NULL, NULL)',
+    [survey.id, input.prompt, input.minValue, input.maxValue, req.user.sub],
   );
-  const result = await pool.query(
-    `INSERT INTO estadistica.preguntas
-       (encuesta_id, posicion, pregunta, valor_minimo, valor_maximo, creado_por)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING id, posicion AS position, pregunta AS prompt,
-               valor_minimo AS min_value, valor_maximo AS max_value`,
-    [survey.id, positionResult.rows[0].position, input.prompt, input.minValue, input.maxValue, req.user.sub],
-  );
-  return res.status(201).json(result.rows[0]);
+  const r = callResult.rows[0];
+  return res.status(201).json({ id: r.p_id, position: r.p_position, prompt: input.prompt, min_value: r.p_min, max_value: r.p_max });
 }));
 
 app.post('/api/surveys/:surveyId/activate', authenticate, asyncRoute(async (req, res) => {
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
   if (survey.status !== 'draft') return res.status(409).json({ error: 'Solo se pueden activar encuestas en borrador.' });
-  const count = await pool.query('SELECT count(*)::int AS count FROM estadistica.preguntas WHERE encuesta_id = $1', [survey.id]);
-  if (count.rows[0].count === 0) return res.status(400).json({ error: 'Agrega al menos una pregunta antes de activar la encuesta.' });
-  const result = await pool.query(
-    `UPDATE estadistica.encuestas
-     SET estado = 'activa', actualizado_en = now(), actualizado_por = $2
-     WHERE id = $1 RETURNING id, 'active' AS status`,
+  const callResult = await pool.query(
+    'CALL estadistica.usp_activar_encuesta($1, $2, NULL)',
     [survey.id, req.user.sub],
   );
-  return res.json(result.rows[0]);
+  if (!callResult.rows[0].p_ok) return res.status(400).json({ error: 'Agrega al menos una pregunta antes de activar la encuesta.' });
+  return res.json({ id: survey.id, status: 'active' });
 }));
 
 app.post('/api/surveys/:surveyId/codes', authenticate, asyncRoute(async (req, res) => {
@@ -336,9 +280,7 @@ app.post('/api/surveys/:surveyId/codes', authenticate, asyncRoute(async (req, re
   for (let index = 0; index < input.count; index += 1) {
     const token = crypto.randomBytes(24).toString('base64url');
     await pool.query(
-      `INSERT INTO estadistica.codigos_encuesta
-         (encuesta_id, usuario_emisor_id, grupo_encuestado, hash_token)
-       VALUES ($1, $2, $3, $4)`,
+      'CALL estadistica.usp_insertar_codigo_encuesta($1, $2, $3, $4)',
       [survey.id, req.user.sub, databaseGroups[input.group], tokenHash(token)],
     );
     const url = `${process.env.PUBLIC_APP_URL.replace(/\/$/, '')}/respond/${token}`;
@@ -353,14 +295,7 @@ app.post('/api/surveys/:surveyId/codes', authenticate, asyncRoute(async (req, re
 
 app.get('/api/respond/:token', asyncRoute(async (req, res) => {
   const result = await pool.query(
-    `SELECT s.id AS survey_id, s.titulo AS title, s.descripcion AS description,
-            CASE s.estado::text WHEN 'borrador' THEN 'draft'
-                                WHEN 'activa' THEN 'active'
-                                WHEN 'cerrada' THEN 'closed' END AS status,
-            c.usado_en AS used_at, c.vence_en AS expires_at
-     FROM estadistica.codigos_encuesta c
-     JOIN estadistica.encuestas s ON s.id = c.encuesta_id
-     WHERE c.hash_token = $1`,
+    'SELECT * FROM estadistica.fn_validar_invitacion($1)',
     [tokenHash(req.params.token)],
   );
   const invitation = result.rows[0];
@@ -369,9 +304,7 @@ app.get('/api/respond/:token', asyncRoute(async (req, res) => {
     return res.status(404).json({ error: 'La invitación no es válida, venció o ya fue utilizada.' });
   }
   const questions = await pool.query(
-    `SELECT id, posicion AS position, pregunta AS prompt,
-            valor_minimo AS min_value, valor_maximo AS max_value
-     FROM estadistica.preguntas WHERE encuesta_id = $1 ORDER BY posicion`,
+    'SELECT * FROM estadistica.fn_preguntas_encuesta($1)',
     [invitation.survey_id],
   );
   return res.json({
@@ -388,27 +321,20 @@ app.post('/api/respond/:token', asyncRoute(async (req, res) => {
       questionId: z.string().uuid(),
       value: z.number().finite(),
     })).min(1).max(500),
+    deviceFingerprint: z.string().max(128).nullable().optional(),
   }), req.body);
   try {
-    await pool.query('CALL estadistica.sp_registrar_respuesta($1, $2::jsonb)', [
+    await pool.query('CALL estadistica.sp_registrar_respuesta($1, $2::jsonb, $3)', [
       tokenHash(req.params.token),
       JSON.stringify(input.answers.map(({ questionId, value }) => ({ pregunta_id: questionId, valor: value }))),
+      input.deviceFingerprint ?? null,
     ]);
   } catch (error) {
     if (error.code === 'P0001') return res.status(409).json({ error: error.message.replaceAll('_', ' ') });
     throw error;
   }
   const result = await pool.query(
-    `SELECT s.id AS survey_id, r.id AS response_id,
-            summary.cantidad_respuestas AS response_count,
-            summary.cantidad_participantes AS participants_count,
-            summary.cantidad_jurados AS judges_count,
-            summary.cantidad_expositores AS exhibitors_count
-     FROM estadistica.codigos_encuesta c
-     JOIN estadistica.respuestas r ON r.codigo_encuesta_id = c.id
-     JOIN estadistica.encuestas s ON s.id = r.encuesta_id
-     JOIN estadistica.vista_resumen_respuestas summary ON summary.encuesta_id = s.id
-     WHERE c.hash_token = $1`,
+    'SELECT * FROM estadistica.fn_datos_respuesta_enviada($1)',
     [tokenHash(req.params.token)],
   );
   const response = result.rows[0];
@@ -421,6 +347,18 @@ app.post('/api/respond/:token', asyncRoute(async (req, res) => {
       exhibitors: Number(response.exhibitors_count),
     },
   });
+  if (response.study_id) {
+    const studyCounts = await pool.query(
+      'SELECT * FROM estadistica.fn_conteo_respuestas_estudio($1)',
+      [response.study_id],
+    );
+    const byGroup = Object.fromEntries(studyCounts.rows.map((r) => [r.group, r.count]));
+    io.to(`estudio:${response.study_id}`).emit('estudio:respuesta', {
+      studyId: response.study_id,
+      byGroup,
+      total: studyCounts.rows.reduce((sum, r) => sum + r.count, 0),
+    });
+  }
   return res.status(201).json({ submitted: true });
 }));
 
@@ -434,8 +372,7 @@ app.get('/api/surveys/:surveyId/analysis', authenticate, asyncRoute(async (req, 
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
   const result = await pool.query(
-    `SELECT contenido AS body, version, actualizado_en AS updated_at
-     FROM estadistica.borradores_analisis WHERE encuesta_id = $1`,
+    'SELECT * FROM estadistica.fn_analisis_borrador($1)',
     [survey.id],
   );
   return res.json(result.rows[0] ?? { body: '', version: 0, updated_at: null });
@@ -445,19 +382,12 @@ app.put('/api/surveys/:surveyId/analysis', authenticate, asyncRoute(async (req, 
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
   const input = validate(z.object({ body: z.string().max(50000) }), req.body);
-  const result = await pool.query(
-    `INSERT INTO estadistica.borradores_analisis AS borrador
-       (encuesta_id, contenido, creado_por, actualizado_por)
-     VALUES ($1, $2, $3, $3)
-     ON CONFLICT (encuesta_id) DO UPDATE
-       SET contenido = EXCLUDED.contenido,
-           version = borrador.version + 1,
-           actualizado_por = EXCLUDED.actualizado_por,
-           actualizado_en = now()
-     RETURNING contenido AS body, version, actualizado_en AS updated_at`,
+  const callResult = await pool.query(
+    'CALL estadistica.usp_guardar_borrador($1, $2, $3, NULL, NULL, NULL)',
     [survey.id, input.body, req.user.sub],
   );
-  return res.json(result.rows[0]);
+  const r = callResult.rows[0];
+  return res.json({ body: r.p_body, version: r.p_version, updated_at: r.p_updated_at });
 }));
 
 app.get('/api/surveys/:surveyId/report.pdf', authenticate, asyncRoute(async (req, res) => {
@@ -483,7 +413,7 @@ app.get('/api/surveys/:surveyId/report.pdf', authenticate, asyncRoute(async (req
     for (const row of question.frequencies) pdf.text(`${row.value}: ${row.frequency}`);
   }
   const draft = await pool.query(
-    'SELECT contenido AS body FROM estadistica.borradores_analisis WHERE encuesta_id = $1',
+    'SELECT * FROM estadistica.fn_analisis_borrador($1)',
     [survey.id],
   );
   if (draft.rows[0]?.body) {
@@ -491,6 +421,102 @@ app.get('/api/surveys/:surveyId/report.pdf', authenticate, asyncRoute(async (req
     pdf.moveDown().fontSize(10).text(draft.rows[0].body);
   }
   pdf.end();
+}));
+
+// ── ESTUDIOS ──────────────────────────────────────────────────────────────────
+
+app.get('/api/estudios', authenticate, asyncRoute(async (_req, res) => {
+  const result = await pool.query('SELECT * FROM estadistica.vw_estudios_lista');
+  return res.json(result.rows);
+}));
+
+app.get('/api/grupos', authenticate, asyncRoute(async (_req, res) => {
+  const result = await pool.query('SELECT * FROM estadistica.vw_grupos_activos');
+  return res.json(result.rows);
+}));
+
+// Admin CRUD — grupos
+app.get('/api/admin/grupos', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (_req, res) => {
+  const result = await pool.query('SELECT * FROM estadistica.fn_listar_grupos_admin()');
+  return res.json(result.rows);
+}));
+
+app.post('/api/admin/grupos', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
+  const input = validate(z.object({
+    nombre: z.string().trim().min(1).max(50).regex(/^[a-z0-9_áéíóúñ]+$/i, 'Solo letras, números y guiones bajos'),
+    etiqueta: z.string().trim().min(1).max(100),
+    icono: z.string().trim().max(10).default('📊'),
+    orden: z.number().int().min(0).max(99).default(0),
+  }), req.body);
+  const r = await pool.query(
+    'CALL estadistica.usp_crear_grupo($1, $2, $3, $4, NULL, NULL)',
+    [input.nombre, input.etiqueta, input.icono, input.orden],
+  );
+  const row = r.rows[0];
+  if (row.p_error) return res.status(400).json({ error: row.p_error });
+  return res.status(201).json({ id: row.p_id, ...input });
+}));
+
+app.put('/api/admin/grupos/:id', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
+  const input = validate(z.object({
+    etiqueta: z.string().trim().min(1).max(100),
+    icono: z.string().trim().max(10).default('📊'),
+    orden: z.number().int().min(0).max(99).default(0),
+    activo: z.boolean().default(true),
+  }), req.body);
+  const r = await pool.query(
+    'CALL estadistica.usp_actualizar_grupo($1, $2, $3, $4, $5, NULL, NULL)',
+    [req.params.id, input.etiqueta, input.icono, input.orden, input.activo],
+  );
+  const row = r.rows[0];
+  if (row.p_error) return res.status(400).json({ error: row.p_error });
+  return res.json({ ok: true });
+}));
+
+app.delete('/api/admin/grupos/:id', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
+  const r = await pool.query(
+    'CALL estadistica.usp_eliminar_grupo($1, NULL, NULL)',
+    [req.params.id],
+  );
+  const row = r.rows[0];
+  if (row.p_error) return res.status(400).json({ error: row.p_error });
+  return res.json({ ok: true });
+}));
+
+app.post('/api/estudios', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
+  const input = validate(z.object({
+    title: z.string().trim().min(1).max(200),
+    description: z.string().max(5000).default(''),
+    shift: z.enum(['mañana', 'noche']),
+    date: z.string().optional(),
+    groups: z.array(z.string()).optional(),
+  }), req.body);
+  const selectedGroups = input.groups?.length > 0 ? input.groups : null;
+  const callResult = await pool.query(
+    'CALL estadistica.usp_crear_estudio($1, $2, $3, $4, $5, $6, NULL)',
+    [input.title, input.description, input.shift, input.date ?? null, req.user.sub, selectedGroups],
+  );
+  const studyId = callResult.rows[0].p_estudio_id;
+  const studyResult = await pool.query(
+    'SELECT * FROM estadistica.vw_estudios_lista WHERE id = $1',
+    [studyId],
+  );
+  return res.status(201).json(studyResult.rows[0]);
+}));
+
+app.get('/api/estudios/:studyId', authenticate, asyncRoute(async (req, res) => {
+  const studyResult = await pool.query(
+    'SELECT * FROM estadistica.vw_estudios_lista WHERE id = $1',
+    [req.params.studyId],
+  );
+  if (!studyResult.rows[0]) return res.status(404).json({ error: 'Estudio no encontrado.' });
+  const study = studyResult.rows[0];
+  const surveysResult = await pool.query(
+    'SELECT * FROM estadistica.fn_encuestas_estudio($1)',
+    [study.id],
+  );
+  const totalResponses = surveysResult.rows.reduce((sum, row) => sum + row.response_count, 0);
+  return res.json({ ...study, surveys: surveysResult.rows, totalResponses });
 }));
 
 io.use((socket, next) => {
@@ -514,6 +540,18 @@ io.on('connection', (socket) => {
     } catch (error) {
       console.error('No se pudo unir a la sala de la encuesta:', error);
       return acknowledge({ error: 'No se pudo activar la actualización de la encuesta.' });
+    }
+  });
+
+  socket.on('estudio:join', async (studyId, acknowledge = () => {}) => {
+    try {
+      const study = await pool.query('SELECT id FROM estadistica.vw_estudios_lista WHERE id = $1', [studyId]);
+      if (!study.rows[0]) return acknowledge({ error: 'Estudio no encontrado.' });
+      await socket.join(`estudio:${studyId}`);
+      return acknowledge({ joined: true });
+    } catch (error) {
+      console.error('No se pudo unir a la sala del estudio:', error);
+      return acknowledge({ error: 'No se pudo activar la actualización del estudio.' });
     }
   });
 });

@@ -5,6 +5,7 @@ import { ActivatedRoute } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 import { Question } from '../core/models';
+import { ButtonComponent } from '../shared/button.component';
 
 interface PublicSurvey {
   surveyId: string;
@@ -16,7 +17,7 @@ interface PublicSurvey {
 @Component({
   selector: 'app-respond',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ButtonComponent],
   template: `
     <section class="response-card">
       @if (submitted) {
@@ -37,7 +38,7 @@ interface PublicSurvey {
             </label>
           }
           @if (error) { <p class="error" role="alert">{{ error }}</p> }
-          <button class="primary" [disabled]="busy">{{ busy ? 'Enviando…' : 'Enviar respuesta' }}</button>
+          <app-button type="submit" [disabled]="busy">{{ busy ? 'Enviando…' : 'Enviar respuesta' }}</app-button>
         </form>
       } @else if (error) {
         <h1>Invitación no disponible</h1><p class="error">{{ error }}</p>
@@ -55,8 +56,6 @@ interface PublicSurvey {
     .question { display:grid; gap:.55rem; font-weight:700; }
     .bounds { font-size:.78rem; font-weight:400; }
     input { width:100%; padding:.8rem; border:1px solid #cbd5e1; border-radius:9px; font:inherit; }
-    button { padding:.85rem 1rem; border:0; border-radius:9px; color:white; background:#185adb; font:inherit; font-weight:700; cursor:pointer; }
-    button:disabled { opacity:.65; }
     .error { color:#b42318; }
     .success-mark { display:grid; place-items:center; width:3rem; height:3rem; border-radius:50%; color:#166534; background:#dcfce7; font-size:1.5rem; }
   `],
@@ -68,6 +67,21 @@ export class RespondComponent implements OnInit {
   busy = false;
   submitted = false;
   private token = '';
+  private deviceFingerprint: string | null = null;
+
+  private getOrCreateFingerprint(): string | null {
+    try {
+      const key = 'device_fp';
+      let fp = localStorage.getItem(key);
+      if (!fp) {
+        fp = crypto.randomUUID();
+        localStorage.setItem(key, fp);
+      }
+      return fp;
+    } catch {
+      return null;
+    }
+  }
 
   constructor(
     private readonly route: ActivatedRoute,
@@ -77,6 +91,7 @@ export class RespondComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     this.token = this.route.snapshot.paramMap.get('token') ?? '';
+    this.deviceFingerprint = this.getOrCreateFingerprint();
     try {
       this.survey = await firstValueFrom(this.http.get<PublicSurvey>(`/api/respond/${this.token}`));
       for (const question of this.survey.questions) this.answers[question.id] = null;
@@ -97,6 +112,7 @@ export class RespondComponent implements OnInit {
     try {
       await firstValueFrom(this.http.post(`/api/respond/${this.token}`, {
         answers: Object.entries(this.answers).map(([questionId, value]) => ({ questionId, value })),
+        deviceFingerprint: this.deviceFingerprint,
       }));
       this.submitted = true;
     } catch {

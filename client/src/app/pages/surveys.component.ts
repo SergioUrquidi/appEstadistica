@@ -5,17 +5,18 @@ import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { Survey } from '../core/models';
 import { HttpClient } from '@angular/common/http';
+import { ButtonComponent } from '../shared/button.component';
 
 @Component({
   selector: 'app-surveys',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, ButtonComponent],
   template: `
     <div class="page-head">
       <div><p class="eyebrow">Panel de trabajo</p><h1>Encuestas</h1><p class="muted">Crea y administra tus estudios cuantitativos.</p></div>
       <form class="create-form" (ngSubmit)="createSurvey()">
         <input name="title" [(ngModel)]="title" placeholder="Nombre de la nueva encuesta" maxlength="200" required>
-        <button class="primary" [disabled]="busy">Crear encuesta</button>
+        <app-button type="submit" [disabled]="busy">Crear encuesta</app-button>
       </form>
     </div>
     @if (error) { <p class="error" role="alert">{{ error }}</p> }
@@ -41,7 +42,6 @@ import { HttpClient } from '@angular/common/http';
     .muted,.description { color:#64748b; }
     .create-form { display:flex; gap:.6rem; }
     input { width:min(340px, 52vw); padding:.75rem; border:1px solid #cbd5e1; border-radius:9px; font:inherit; }
-    button { border:0; border-radius:9px; padding:.78rem 1rem; color:white; background:#185adb; font:inherit; font-weight:700; cursor:pointer; }
     .survey-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:1rem; }
     .survey-card { min-height:175px; padding:1.25rem; border:1px solid #e2e8f0; border-radius:14px; background:white; color:inherit; text-decoration:none; transition:transform .15s,box-shadow .15s; }
     .survey-card:hover { transform:translateY(-2px); box-shadow:0 12px 30px #102a4310; }

@@ -2,14 +2,14 @@ import { ChangeDetectorRef, Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../core/auth.service';
+import { ButtonComponent } from '../shared/button.component';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, ButtonComponent],
   template: `
     <section class="login-card">
-      <p class="eyebrow">Sistema de estadística</p>
       <h1>Iniciar sesión</h1>
       <p class="muted">Administra encuestas, invitaciones y análisis.</p>
       <form (ngSubmit)="submit()">
@@ -20,9 +20,9 @@ import { AuthService } from '../core/auth.service';
           <input type="password" name="password" [(ngModel)]="password" autocomplete="current-password" required>
         </label>
         @if (error) { <p class="error" role="alert">{{ error }}</p> }
-        <button class="primary" type="submit" [disabled]="busy">
+        <app-button type="submit" class="wide" [disabled]="busy">
           {{ busy ? 'Ingresando…' : 'Ingresar' }}
-        </button>
+        </app-button>
       </form>
     </section>
   `,
@@ -32,10 +32,7 @@ import { AuthService } from '../core/auth.service';
     form { display: grid; gap: 1rem; margin-top: 1.5rem; }
     label { display: grid; gap: .45rem; color: #334155; font-size: .9rem; font-weight: 600; }
     input { width: 100%; padding: .8rem; border: 1px solid #cbd5e1; border-radius: 9px; font: inherit; }
-    button { padding: .85rem; border: 0; border-radius: 9px; cursor: pointer; font: inherit; font-weight: 700; }
-    .primary { color: white; background: #185adb; }
     .error { color: #b42318; }
-    .eyebrow { color: #185adb; font-size: .75rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
     .muted { color: #64748b; }
   `],
 })

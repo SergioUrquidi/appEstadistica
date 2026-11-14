@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../core/auth.service';
+import { ButtonComponent } from '../shared/button.component';
 
 interface ManagedUser {
   id: string;
@@ -16,7 +17,7 @@ interface ManagedUser {
 @Component({
   selector: 'app-users',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ButtonComponent],
   template: `
     <p class="eyebrow">Administración</p><h1>Usuarios</h1>
     <p class="muted">Administra el acceso al sistema según el rol asignado.</p>
@@ -39,7 +40,7 @@ interface ManagedUser {
         }
         @if (error) { <p class="error" role="alert">{{ error }}</p> }
         @if (success) { <p class="success" role="status">{{ success }}</p> }
-        <button class="primary" [disabled]="busy">{{ busy ? 'Creando…' : 'Crear usuario' }}</button>
+        <app-button type="submit" [disabled]="busy">{{ busy ? 'Creando…' : 'Crear usuario' }}</app-button>
       </form>
     </section>
     <section class="panel">
@@ -59,7 +60,7 @@ interface ManagedUser {
     form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; margin-top:1rem; }
     label { display:grid; gap:.4rem; color:#334155; font-size:.86rem; font-weight:700; }
     input,select { width:100%; padding:.7rem; border:1px solid #cbd5e1; border-radius:8px; font:inherit; }
-    button { grid-column:1/-1; justify-self:start; border:0; border-radius:8px; padding:.75rem 1rem; color:white; background:#185adb; font:inherit; font-weight:700; cursor:pointer; }
+    app-button { grid-column:1/-1; justify-self:start; }
     .table-wrap { overflow-x:auto; }
     table { width:100%; border-collapse:collapse; text-align:left; font-size:.9rem; }
     th,td { padding:.75rem; border-bottom:1px solid #e2e8f0; white-space:nowrap; }

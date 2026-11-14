@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 import { Question, SurveyDetail, SurveyReport } from '../core/models';
 import { SocketService } from '../core/socket.service';
+import { ButtonComponent } from '../shared/button.component';
 
 interface Invitation {
   group: string;
@@ -16,14 +17,14 @@ interface Invitation {
 @Component({
   selector: 'app-survey-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, ButtonComponent],
   template: `
     @if (survey) {
       <a class="back-link" routerLink="/encuestas">← Todas las encuestas</a>
       <header class="page-head">
         <div><p class="eyebrow">{{ statusLabel(survey.status) }}</p><h1>{{ survey.title }}</h1><p class="muted">{{ survey.description || 'Estudio cuantitativo' }}</p></div>
         @if (survey.status === 'draft') {
-          <button class="primary" (click)="activate()" [disabled]="busy || !survey.questions.length">Activar encuesta</button>
+          <app-button (click)="activate()" [disabled]="busy || !survey.questions.length">Activar encuesta</app-button>
         }
       </header>
 
@@ -46,7 +47,7 @@ interface Invitation {
               <input name="maxValue" type="number" step="any" [(ngModel)]="maxValue">
             </label>
             @if (error) { <p class="error wide" role="alert">{{ error }}</p> }
-            <button class="secondary wide" [disabled]="busy">Agregar pregunta</button>
+            <app-button type="submit" variant="secondary" class="wide" [disabled]="busy">Agregar pregunta</app-button>
           </form>
         </section>
       } @else {
@@ -69,7 +70,7 @@ interface Invitation {
               <label>Cantidad
                 <input name="count" type="number" min="1" max="100" [(ngModel)]="inviteCount" required>
               </label>
-              <button class="secondary" [disabled]="busy">Generar QR</button>
+              <app-button type="submit" variant="secondary" [disabled]="busy">Generar QR</app-button>
             </form>
             @if (error) { <p class="error" role="alert">{{ error }}</p> }
             @if (invitations.length) {
@@ -87,7 +88,7 @@ interface Invitation {
 
         <section class="panel report-panel">
           <div class="section-title"><div><h2>Resultados estadísticos</h2><p class="muted">Cálculos sobre las respuestas recibidas, sin datos de muestra.</p></div>
-            <button class="secondary" (click)="downloadPdf()" [disabled]="busy">Descargar PDF</button>
+            <app-button variant="secondary" (click)="downloadPdf()" [disabled]="busy">Descargar PDF</app-button>
           </div>
           @if (!report?.questions?.length) {
             <p class="empty-note">Aún no hay preguntas o respuestas para mostrar.</p>
@@ -109,11 +110,15 @@ interface Invitation {
               </div>
               <h4>Tabla de frecuencias</h4>
               @if (question.frequencies.length) {
-                <div class="frequency-list">
-                  @for (row of question.frequencies; track row.value) {
-                    <div class="frequency-row"><span>{{ row.value }}</span><div class="bar-track"><i [style.width.%]="frequencyWidth(row.frequency, question)"></i></div><strong>{{ row.frequency }}</strong></div>
+                <svg class="freq-chart" [attr.viewBox]="'0 0 480 ' + chartHeight(question)" width="100%" [attr.height]="chartHeight(question)" role="img" aria-label="Distribución de frecuencias">
+                  @for (row of question.frequencies; track row.value; let i = $index) {
+                    <g [attr.transform]="'translate(0,' + (i * 32) + ')'">
+                      <text x="52" y="20" text-anchor="end" font-size="12" fill="#475569">{{ row.value }}</text>
+                      <rect x="58" y="6" [attr.width]="barWidth(row.frequency, question)" height="18" fill="#3876e8" rx="3"/>
+                      <text [attr.x]="barWidth(row.frequency, question) + 64" y="20" font-size="12" fill="#334155" font-weight="700">{{ row.frequency }}</text>
+                    </g>
                   }
-                </div>
+                </svg>
               } @else { <p class="muted">Sin respuestas todavía.</p> }
             </article>
           }
@@ -124,7 +129,7 @@ interface Invitation {
             <span class="version">Versión {{ draftVersion }}</span>
           </div>
           <textarea [(ngModel)]="analysis" rows="8" maxlength="50000" placeholder="Redacta aquí la interpretación de los resultados, conclusiones y recomendaciones…"></textarea>
-          <div class="save-row"><span class="muted">{{ savedAt ? 'Guardado: ' + (savedAt | date:'short') : 'Cambios sin guardar' }}</span><button class="primary" (click)="saveAnalysis()" [disabled]="busy">Guardar borrador</button></div>
+          <div class="save-row"><span class="muted">{{ savedAt ? 'Guardado: ' + (savedAt | date:'short') : 'Cambios sin guardar' }}</span><app-button (click)="saveAnalysis()" [disabled]="busy">Guardar borrador</app-button></div>
         </section>
       }
     } @else if (error) { <p class="error" role="alert">{{ error }}</p> } @else { <p>Cargando encuesta…</p> }
@@ -141,10 +146,6 @@ interface Invitation {
     .muted,small { color:#64748b; }
     .muted { margin:.35rem 0; }
     .panel { margin:1rem 0; padding:1.25rem; border:1px solid #e2e8f0; border-radius:14px; background:white; }
-    .primary,.secondary { border:0; border-radius:8px; padding:.75rem 1rem; font:inherit; font-weight:700; cursor:pointer; }
-    .primary { color:white; background:#185adb; }
-    .secondary { color:#194185; background:#e9f0ff; }
-    button:disabled { opacity:.55; cursor:wait; }
     .question-list { display:grid; gap:.7rem; padding:0; list-style:none; }
     .question-list li { display:flex; align-items:start; gap:.75rem; padding:.75rem; border:1px solid #edf0f5; border-radius:10px; }
     .question-list small { display:block; margin-top:.25rem; }
@@ -171,10 +172,7 @@ interface Invitation {
     .stat-grid div { padding:.65rem; border-radius:8px; background:#f8fafc; }
     .stat-grid small,.stat-grid strong { display:block; }
     .stat-grid strong { margin-top:.3rem; }
-    .frequency-list { display:grid; gap:.45rem; max-width:650px; }
-    .frequency-row { display:grid; grid-template-columns:55px 1fr 35px; align-items:center; gap:.6rem; font-size:.83rem; }
-    .bar-track { height:10px; overflow:hidden; border-radius:99px; background:#eef2f7; }
-    .bar-track i { display:block; height:100%; border-radius:99px; background:#3876e8; }
+    .freq-chart { display:block; max-width:650px; overflow:visible; }
     .analysis-panel textarea { margin:.6rem 0; resize:vertical; }
     .save-row { justify-content:end; }
     .save-row span { margin-right:auto; font-size:.8rem; }
@@ -182,7 +180,7 @@ interface Invitation {
     .error { color:#b42318; }
     .empty-note { padding:1rem; color:#64748b; background:#f8fafc; border-radius:9px; }
     @media(max-width:760px) { .dashboard-grid { grid-template-columns:1fr; } }
-    @media(max-width:560px) { .question-form,.invite-form { grid-template-columns:1fr; } .page-head { align-items:start; flex-direction:column; } .page-head button { width:100%; } .save-row { align-items:end; flex-wrap:wrap; } }
+    @media(max-width:560px) { .question-form,.invite-form { grid-template-columns:1fr; } .page-head { align-items:start; flex-direction:column; } .page-head app-button { width:100%; } .save-row { align-items:end; flex-wrap:wrap; } }
   `],
 })
 export class SurveyDetailComponent implements OnInit, OnDestroy {
@@ -365,8 +363,12 @@ export class SurveyDetailComponent implements OnInit, OnDestroy {
     return value === null ? 'N/D' : `${Number(value.toFixed(3))}${suffix}`;
   }
 
-  frequencyWidth(frequency: number, question: { frequencies: { frequency: number }[] }): number {
-    const maximum = Math.max(...question.frequencies.map((row) => row.frequency), 1);
-    return (frequency / maximum) * 100;
+  chartHeight(question: { frequencies: { frequency: number }[] }): number {
+    return Math.max(question.frequencies.length * 32 + 8, 40);
+  }
+
+  barWidth(frequency: number, question: { frequencies: { frequency: number }[] }): number {
+    const max = Math.max(...question.frequencies.map((r) => r.frequency), 1);
+    return Math.round((frequency / max) * 380);
   }
 }
