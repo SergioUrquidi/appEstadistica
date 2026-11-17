@@ -40,7 +40,7 @@ describe('App', () => {
   it('should render the application brand', async () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
-    http.expectOne('/api/grupos').flush([
+    http.expectOne('/api/grupos/con-encuesta-activa').flush([
       { id: 'group-id', nombre: 'jurados', etiqueta: 'Jurados desde DB', icono: '⚖', orden: 1, activo: true },
     ]);
     await fixture.whenStable();
