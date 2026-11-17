@@ -1,6 +1,9 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, effect, OnInit } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { AuthService } from './core/auth.service';
+import { Group } from './core/models';
 import { ButtonComponent } from './shared/button.component';
 
 @Component({
@@ -18,6 +21,19 @@ import { ButtonComponent } from './shared/button.component';
           <a routerLink="/estudios" routerLinkActive="active-link">
             <span class="nav-icon">⬡</span><span class="nav-label">Ferias</span>
           </a>
+          <div class="nav-group">
+            <a routerLink="/generador-qr" routerLinkActive="active-link">
+              <span class="nav-icon">▦</span><span class="nav-label">Generador QR</span>
+            </a>
+            <div class="nav-submenu">
+              @for (group of groups; track group.id) {
+                <a class="nav-submenu-link" [routerLink]="['/generador-qr', group.id]" routerLinkActive="active-link">
+                  <span class="nav-submenu-icon" aria-hidden="true">{{ group.icono }}</span><span>{{ group.etiqueta }}</span>
+                </a>
+              }
+              @if (groupsError) { <span class="nav-error" role="alert">{{ groupsError }}</span> }
+            </div>
+          </div>
 
           @if (user.role === 'admin' || user.role === 'superuser') {
             <a routerLink="/usuarios" routerLinkActive="active-link">
@@ -47,10 +63,43 @@ import { ButtonComponent } from './shared/button.component';
   styleUrl: './app.scss',
 })
 export class App implements OnInit {
-  constructor(readonly auth: AuthService, private readonly router: Router) {}
+  groups: Group[] = [];
+  groupsError = '';
+  private groupsUserId: string | null = null;
 
-  ngOnInit(): void {
-    void this.auth.initialize();
+  constructor(
+    readonly auth: AuthService,
+    private readonly router: Router,
+    private readonly http: HttpClient,
+    private readonly cdr: ChangeDetectorRef,
+  ) {
+    effect(() => {
+      const user = this.auth.user();
+      if (!user) {
+        this.groupsUserId = null;
+        this.groups = [];
+        this.groupsError = '';
+        return;
+      }
+      if (this.groupsUserId === user.id) return;
+      this.groupsUserId = user.id;
+      void this.loadGroups();
+    });
+  }
+
+  async ngOnInit(): Promise<void> {
+    await this.auth.initialize();
+  }
+
+  private async loadGroups(): Promise<void> {
+    this.groupsError = '';
+    try {
+      this.groups = await firstValueFrom(this.http.get<Group[]>('/api/grupos'));
+    } catch {
+      this.groupsError = 'No se cargaron los grupos.';
+    } finally {
+      this.cdr.markForCheck();
+    }
   }
 
   logout(): void {

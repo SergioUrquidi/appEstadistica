@@ -27,16 +27,10 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: process.env.CLIENT_ORIGIN } });
 const port = Number(process.env.PORT ?? 3000);
 const roles = ['superuser', 'admin', 'user'];
-const respondentGroups = ['participants', 'judges', 'exhibitors'];
 const databaseRoles = {
   superuser: 'superusuario',
   admin: 'administrador',
   user: 'usuario',
-};
-const databaseGroups = {
-  participants: 'participantes',
-  judges: 'jurados',
-  exhibitors: 'expositores',
 };
 
 app.use(helmet());
@@ -240,16 +234,41 @@ app.post('/api/users', authenticate, allowRoles('admin', 'superuser'), asyncRout
 }));
 
 app.get('/api/surveys', authenticate, asyncRoute(async (req, res) => {
+  const groupId = req.query.groupId
+    ? validate(z.string().uuid(), req.query.groupId)
+    : null;
+  if (groupId) {
+    const group = await pool.query(
+      'SELECT id FROM estadistica.vw_grupos_activos WHERE id = $1',
+      [groupId],
+    );
+    if (!group.rows[0]) return res.status(404).json({ error: 'No se encontró el grupo activo.' });
+  }
   const result = await pool.query(
-    `SELECT s.*, e.modo_codigo AS mode_code, m.etiqueta AS mode_label,
+    `SELECT s.*, e.grupo AS "group", g.id AS group_id, g.etiqueta AS group_label,
+            e.modo_codigo AS mode_code, m.etiqueta AS mode_label,
             m.descripcion AS mode_description,
             COALESCE(m.requiere_clave_correcta, false) AS requires_correct_answer,
             COALESCE(m.califica_respuestas, false) AS grades_answers
      FROM estadistica.fn_encuestas_usuario($1, $2) s
      JOIN estadistica.encuestas e ON e.id = s.id
+     LEFT JOIN estadistica.grupos g ON g.nombre = e.grupo
      LEFT JOIN estadistica.modos_encuesta m ON m.codigo = e.modo_codigo
+     WHERE ($3::uuid IS NULL OR (g.id = $3 AND g.activo AND s.status = 'active'))
      ORDER BY s.created_at DESC`,
-    [req.user.sub, ['admin', 'superuser'].includes(req.user.role)],
+    [req.user.sub, ['admin', 'superuser'].includes(req.user.role), groupId],
+  );
+  return res.json(result.rows);
+}));
+
+app.get('/api/respondent-groups', authenticate, asyncRoute(async (_req, res) => {
+  const result = await pool.query(
+    `SELECT e.enumlabel AS value, e.enumlabel AS label
+     FROM pg_enum e
+     JOIN pg_type t ON t.oid = e.enumtypid
+     JOIN pg_namespace n ON n.oid = t.typnamespace
+     WHERE n.nspname = 'estadistica' AND t.typname = 'grupo_encuestado'
+     ORDER BY e.enumsortorder`,
   );
   return res.json(result.rows);
 }));
@@ -465,19 +484,41 @@ app.post('/api/surveys/:surveyId/codes', authenticate, asyncRoute(async (req, re
   if (error) return res.status(status).json({ error });
   if (survey.status !== 'active') return res.status(409).json({ error: 'Activa la encuesta antes de generar invitaciones.' });
   const input = validate(z.object({
-    group: z.enum(respondentGroups),
+    surveyGroupId: z.string().uuid(),
+    respondentGroup: z.string().trim().min(1),
     count: z.number().int().min(1).max(100),
   }), req.body);
+  const surveyGroup = await pool.query(
+    `SELECT g.id
+     FROM estadistica.encuestas e
+     JOIN estadistica.grupos g ON g.nombre = e.grupo AND g.activo
+     WHERE e.id = $1`,
+    [survey.id],
+  );
+  if (!surveyGroup.rows[0] || surveyGroup.rows[0].id !== input.surveyGroupId) {
+    return res.status(409).json({ error: 'La encuesta no pertenece al grupo seleccionado.' });
+  }
+  const allowedGroup = await pool.query(
+    `SELECT 1
+     FROM pg_enum e
+     JOIN pg_type t ON t.oid = e.enumtypid
+     JOIN pg_namespace n ON n.oid = t.typnamespace
+     WHERE n.nspname = 'estadistica'
+       AND t.typname = 'grupo_encuestado'
+       AND e.enumlabel = $1`,
+    [input.respondentGroup],
+  );
+  if (!allowedGroup.rows[0]) return res.status(400).json({ error: 'El tipo de encuestado no existe.' });
   const invitations = [];
   for (let index = 0; index < input.count; index += 1) {
     const token = crypto.randomBytes(24).toString('base64url');
     await pool.query(
       'CALL estadistica.usp_insertar_codigo_encuesta($1, $2, $3, $4)',
-      [survey.id, req.user.sub, databaseGroups[input.group], tokenHash(token)],
+      [survey.id, req.user.sub, input.respondentGroup, tokenHash(token)],
     );
     const url = `${process.env.PUBLIC_APP_URL.replace(/\/$/, '')}/respond/${token}`;
     invitations.push({
-      group: input.group,
+      respondentGroup: input.respondentGroup,
       url,
       qrCode: await QRCode.toDataURL(url, { errorCorrectionLevel: 'M', margin: 1 }),
     });
@@ -491,9 +532,18 @@ app.get('/api/respond/:token', asyncRoute(async (req, res) => {
     [tokenHash(req.params.token)],
   );
   const invitation = result.rows[0];
-  if (!invitation || invitation.status !== 'active' || invitation.used_at
-      || (invitation.expires_at && new Date(invitation.expires_at) <= new Date())) {
+  if (!invitation) {
     return res.status(404).json({ error: 'La invitación no es válida, venció o ya fue utilizada.' });
+  }
+  if (invitation.used_at) {
+    return res.status(410).json({
+      code: 'INVITATION_ALREADY_USED',
+      error: 'Esta encuesta ya fue contestada satisfactoriamente.',
+    });
+  }
+  if (invitation.status !== 'active'
+      || (invitation.expires_at && new Date(invitation.expires_at) <= new Date())) {
+    return res.status(404).json({ error: 'La invitación no es válida o venció.' });
   }
   const questions = await pool.query(
     'SELECT * FROM estadistica.fn_preguntas_encuesta($1)',
@@ -578,6 +628,18 @@ app.post('/api/respond/:token', asyncRoute(async (req, res) => {
     transactionStarted = false;
   } catch (error) {
     if (transactionStarted) await client.query('ROLLBACK');
+    if (error.code === 'P0001' && error.message === 'codigo_invalido_o_usado') {
+      const invitationResult = await client.query(
+        'SELECT * FROM estadistica.fn_validar_invitacion($1)',
+        [tokenHash(req.params.token)],
+      );
+      if (invitationResult.rows[0]?.used_at) {
+        return res.status(410).json({
+          code: 'INVITATION_ALREADY_USED',
+          error: 'Esta encuesta ya fue contestada satisfactoriamente.',
+        });
+      }
+    }
     if (error.code === 'P0001') return res.status(409).json({ error: error.message.replaceAll('_', ' ') });
     throw error;
   } finally {
@@ -738,18 +800,87 @@ app.post('/api/estudios', authenticate, allowRoles('admin', 'superuser'), asyncR
     shift: z.enum(['mañana', 'noche']),
     modeCode: z.string().trim().min(1),
     date: z.string().optional(),
-    groups: z.array(z.string()).optional(),
+    groups: z.array(z.string().trim().min(1)).min(1),
+    groupTargets: z.array(z.object({
+      group: z.string().trim().min(1),
+      targetCount: z.number().int().min(0).max(2147483647),
+    })).min(1),
+    respondentTargets: z.array(z.object({
+      respondentGroup: z.string().trim().min(1),
+      targetCount: z.number().int().min(0).max(2147483647),
+    })).default([]),
   }), req.body);
-  const selectedGroups = input.groups?.length > 0 ? input.groups : null;
+  const selectedGroups = [...new Set(input.groups)];
+  const targetsByGroup = new Map(input.groupTargets.map(({ group, targetCount }) => [group, targetCount]));
+  const respondentTargetsByGroup = new Map(
+    input.respondentTargets.map(({ respondentGroup, targetCount }) => [respondentGroup, targetCount]),
+  );
+  if (selectedGroups.length !== input.groups.length
+      || targetsByGroup.size !== input.groupTargets.length
+      || targetsByGroup.size !== selectedGroups.length
+      || selectedGroups.some((group) => !targetsByGroup.has(group))
+      || respondentTargetsByGroup.size !== input.respondentTargets.length) {
+    return res.status(400).json({ error: 'Las metas deben ser únicas por grupo y tipo de encuestado.' });
+  }
+  const client = await pool.connect();
   let callResult;
   try {
-    callResult = await pool.query(
+    await client.query('BEGIN');
+    const activeGroups = await client.query(
+      `SELECT id, nombre
+       FROM estadistica.grupos
+       WHERE nombre = ANY($1::varchar[]) AND activo
+       FOR SHARE`,
+      [selectedGroups],
+    );
+    if (activeGroups.rows.length !== selectedGroups.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Uno o más grupos seleccionados ya no están activos.' });
+    }
+    if (respondentTargetsByGroup.size > 0) {
+      const allowedRespondentGroups = await client.query(
+        `SELECT e.enumlabel
+         FROM pg_enum e
+         JOIN pg_type t ON t.oid = e.enumtypid
+         JOIN pg_namespace n ON n.oid = t.typnamespace
+         WHERE n.nspname = 'estadistica'
+           AND t.typname = 'grupo_encuestado'
+           AND e.enumlabel = ANY($1::text[])`,
+        [[...respondentTargetsByGroup.keys()]],
+      );
+      if (allowedRespondentGroups.rows.length !== respondentTargetsByGroup.size) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Uno o más tipos de encuestado ya no existen.' });
+      }
+    }
+    callResult = await client.query(
       'CALL estadistica.usp_crear_estudio($1, $2, $3, $4, $5, $6, $7, NULL)',
       [input.title, input.description, input.shift, input.date ?? null, req.user.sub, selectedGroups, input.modeCode],
     );
+    const studyId = callResult.rows[0].p_estudio_id;
+    for (const group of activeGroups.rows) {
+      await client.query(
+        `INSERT INTO estadistica.estudio_metas_grupo
+           (estudio_id, grupo_id, cantidad_objetivo, creado_por)
+         VALUES ($1, $2, $3, $4)`,
+        [studyId, group.id, targetsByGroup.get(group.nombre), req.user.sub],
+      );
+    }
+    for (const [respondentGroup, targetCount] of respondentTargetsByGroup) {
+      await client.query(
+        `INSERT INTO estadistica.estudio_metas_encuestado
+           (estudio_id, grupo_encuestado, cantidad_objetivo, creado_por)
+         VALUES ($1, $2::estadistica.grupo_encuestado, $3, $4)`,
+        [studyId, respondentGroup, targetCount, req.user.sub],
+      );
+    }
+    await client.query('COMMIT');
   } catch (error) {
+    await client.query('ROLLBACK');
     if (error.code === 'P0001') return res.status(400).json({ error: error.message.replaceAll('_', ' ') });
     throw error;
+  } finally {
+    client.release();
   }
   const studyId = callResult.rows[0].p_estudio_id;
   const studyResult = await pool.query(
@@ -767,15 +898,32 @@ app.get('/api/estudios/:studyId', authenticate, asyncRoute(async (req, res) => {
   if (!studyResult.rows[0]) return res.status(404).json({ error: 'Estudio no encontrado.' });
   const study = studyResult.rows[0];
   const surveysResult = await pool.query(
-    `SELECT s.*, e.modo_codigo AS mode_code, m.etiqueta AS mode_label
+    `SELECT s.*, g.id AS group_id, target.cantidad_objetivo AS target_count,
+            e.modo_codigo AS mode_code, m.etiqueta AS mode_label
      FROM estadistica.fn_encuestas_estudio($1) s
      JOIN estadistica.encuestas e ON e.id = s.id
+     LEFT JOIN estadistica.grupos g ON g.nombre = s."group"
+     LEFT JOIN estadistica.estudio_metas_grupo target
+       ON target.estudio_id = $1 AND target.grupo_id = g.id
      LEFT JOIN estadistica.modos_encuesta m ON m.codigo = e.modo_codigo
      ORDER BY s.orden NULLS LAST`,
     [study.id],
   );
   const totalResponses = surveysResult.rows.reduce((sum, row) => sum + row.response_count, 0);
-  return res.json({ ...study, surveys: surveysResult.rows, totalResponses });
+  const respondentTargets = await pool.query(
+    `SELECT grupo_encuestado::text AS value, grupo_encuestado::text AS label,
+            cantidad_objetivo AS target_count
+     FROM estadistica.estudio_metas_encuestado
+     WHERE estudio_id = $1
+     ORDER BY grupo_encuestado`,
+    [study.id],
+  );
+  return res.json({
+    ...study,
+    surveys: surveysResult.rows,
+    totalResponses,
+    respondentTargets: respondentTargets.rows,
+  });
 }));
 
 io.use((socket, next) => {

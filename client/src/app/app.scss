@@ -93,6 +93,37 @@ $accent: #185adb;
 
 .nav-label { flex: 1; }
 
+.nav-submenu {
+  margin: 0 .5rem .35rem 2rem;
+  padding-left: .35rem;
+  border-left: 1px solid $sidebar-border;
+
+  .nav-submenu-link {
+    gap: .55rem;
+    padding: .42rem .55rem;
+    margin: .05rem 0;
+    font-size: .75rem;
+    font-weight: 500;
+  }
+}
+
+.nav-submenu-icon {
+  display: grid;
+  place-items: center;
+  min-width: 1rem;
+  min-height: 1rem;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: .58rem;
+}
+
+.nav-error {
+  display: block;
+  margin: .4rem .55rem;
+  color: #fca5a5;
+  font-size: .68rem;
+}
+
 /* ── Sidebar footer (user) ──────────────────────────────────── */
 .sidebar-footer {
   display: flex;
@@ -172,4 +203,16 @@ footer {
   .app-body:not(.app-body--full) { margin-left: 64px; }
   .sidebar-footer { justify-content: center; }
   .logout-btn { display: none; }
+  .nav-submenu {
+    margin-left: .55rem;
+    padding-left: 0;
+    border-left: 0;
+
+    .nav-submenu-link {
+      justify-content: center;
+      padding: .4rem 0;
+    }
+
+    .nav-submenu-link span:last-child { display: none; }
+  }
 }

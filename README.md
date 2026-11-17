@@ -19,7 +19,11 @@ por Socket.IO al recibir respuestas.
    Usa una contraseña de aplicación de al menos 12 caracteres y no reutilices la
    contraseña de PostgreSQL. El archivo `.env` está excluido de Git.
 
-2. Instala y ejecuta la API:
+2. Antes de iniciar una versión que incluya cambios de esquema, aplica en
+   PostgreSQL cada archivo pendiente de `database/migrations`. La aplicación no
+   ejecuta esas migraciones automáticamente.
+
+3. Instala y ejecuta la API:
 
    ```powershell
    cd server
@@ -28,7 +32,7 @@ por Socket.IO al recibir respuestas.
    npm run dev
    ```
 
-3. En otra terminal, instala e inicia Angular:
+4. En otra terminal, instala e inicia Angular:
 
    ```powershell
    cd client
@@ -36,7 +40,7 @@ por Socket.IO al recibir respuestas.
    npm start
    ```
 
-4. Abre <http://localhost:4200> e inicia sesión con `SUPERUSER_EMAIL` y
+5. Abre <http://localhost:4200> e inicia sesión con `SUPERUSER_EMAIL` y
    `SUPERUSER_PASSWORD`.
 
 Angular reenvía `/api` y `/socket.io` a la API local. Para otros entornos,
@@ -54,9 +58,15 @@ la API.
 - Las ferias asignan el enfoque seleccionado a todas las encuestas de sus
   grupos. Las encuestas preexistentes sin enfoque requieren clasificación
   explícita antes de continuar.
-- Invitaciones QR separadas por participantes, jurados y expositores. El QR
-  contiene un token aleatorio de un solo uso; se almacena únicamente su hash.
-  No se usa IMEI, porque un navegador web no puede leerlo de manera fiable.
+- El menú QR y sus encuestas se cargan por grupo activo desde PostgreSQL. El
+  tipo de encuestado sigue siendo el enum existente en PostgreSQL, consultado
+  desde la API para no duplicar sus valores en el cliente.
+- Metas ingresadas explícitamente por cada feria, separadas entre grupos de
+  encuesta y tipos de encuestado; los registros históricos no reciben
+  cantidades predeterminadas.
+- Invitaciones QR con un token aleatorio de un solo uso; se almacena únicamente
+  su hash. No se usa IMEI, porque un navegador web no puede leerlo de manera
+  fiable.
 - Captura pública, con validación en API y base de datos, bloqueo concurrente y
   rechazo de respuestas duplicadas.
 - Panel con actualización en tiempo real; estadísticas, frecuencias y descarga

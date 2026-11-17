@@ -1,10 +1,9 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/auth.guard';
 import { AdminComponent } from './pages/admin.component';
-import { EstudioDetailComponent } from './pages/estudio-detail.component';
-import { EstudiosComponent } from './pages/estudios.component';
 import { LoginComponent } from './pages/login.component';
 import { RespondComponent } from './pages/respond.component';
+import { InvitationUsedComponent } from './pages/invitation-used.component';
 import { SurveyDetailComponent } from './pages/survey-detail.component';
 import { SurveysComponent } from './pages/surveys.component';
 import { UsersComponent } from './pages/users.component';
@@ -12,8 +11,11 @@ import { UsersComponent } from './pages/users.component';
 export const routes: Routes = [
   { path: 'iniciar-sesion', component: LoginComponent },
   { path: 'responder/:token', component: RespondComponent },
-  { path: 'estudios', component: EstudiosComponent, canActivate: [authGuard] },
-  { path: 'estudios/:id', component: EstudioDetailComponent, canActivate: [authGuard] },
+  { path: 'encuesta-respondida', component: InvitationUsedComponent },
+  { path: 'generador-qr', loadComponent: () => import('./pages/qr-generator.component').then((module) => module.QrGeneratorComponent), canActivate: [authGuard] },
+  { path: 'generador-qr/:groupId', loadComponent: () => import('./pages/qr-generator.component').then((module) => module.QrGeneratorComponent), canActivate: [authGuard] },
+  { path: 'estudios', loadComponent: () => import('./pages/estudios.component').then((module) => module.EstudiosComponent), canActivate: [authGuard] },
+  { path: 'estudios/:id', loadComponent: () => import('./pages/estudio-detail.component').then((module) => module.EstudioDetailComponent), canActivate: [authGuard] },
   { path: 'encuestas', component: SurveysComponent, canActivate: [authGuard] },
   { path: 'encuestas/:id', component: SurveyDetailComponent, canActivate: [authGuard] },
   { path: 'usuarios', component: UsersComponent, canActivate: [authGuard] },

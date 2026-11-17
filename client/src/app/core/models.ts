@@ -9,6 +9,9 @@ export interface Survey {
   id: string;
   title: string;
   description: string;
+  group?: string | null;
+  group_id?: string | null;
+  group_label?: string | null;
   status: 'draft' | 'active' | 'closed';
   created_at: string;
   response_count?: number;
@@ -104,10 +107,21 @@ export interface Group {
   activo: boolean;
 }
 
+export interface RespondentGroup {
+  value: string;
+  label: string;
+}
+
+export interface RespondentTarget extends RespondentGroup {
+  target_count: number;
+}
+
 export interface StudySurvey {
   id: string;
   title: string;
   group: string;
+  group_id: string | null;
+  target_count: number | null;
   etiqueta: string;
   icono: string;
   orden: number;
@@ -131,6 +145,7 @@ export interface Study {
 export interface StudyDetail extends Study {
   surveys: StudySurvey[];
   totalResponses: number;
+  respondentTargets: RespondentTarget[];
 }
 
 export interface SurveyReport {

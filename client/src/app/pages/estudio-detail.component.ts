@@ -40,8 +40,14 @@ import { StudyDetail, StudySurvey } from '../core/models';
             <div class="group-icon">{{ survey.icono }}</div>
             <div class="group-info">
               <h2>{{ survey.etiqueta }}</h2>
-              <div class="response-count">{{ countsMap[survey.group] ?? 0 }}</div>
-              <p class="count-label">respuestas recibidas</p>
+              <div class="response-count">
+                {{ responseCount(survey) }}
+                @if (survey.target_count !== null) { / {{ survey.target_count }} }
+              </div>
+              <p class="count-label">
+                @if (survey.target_count !== null) { respuestas de la cantidad objetivo }
+                @else { respuestas recibidas }
+              </p>
             </div>
             <div class="group-actions">
               <span class="survey-status" [class.active]="survey.status === 'active'">
@@ -56,6 +62,20 @@ import { StudyDetail, StudySurvey } from '../core/models';
         }
       </div>
 
+      @if (study.respondentTargets.length) {
+        <section class="panel target-section">
+          <h2>Metas por tipo de encuestado</h2>
+          <div class="target-list">
+            @for (target of study.respondentTargets; track target.value) {
+              <div class="target-item">
+                <strong>{{ target.label | titlecase }}</strong>
+                <span>{{ target.target_count }} personas</span>
+              </div>
+            }
+          </div>
+        </section>
+      }
+
       <section class="panel progress-section">
         <h2>Progreso general</h2>
         <div class="bars">
@@ -63,7 +83,7 @@ import { StudyDetail, StudySurvey } from '../core/models';
             <div class="bar-row">
               <span class="bar-label">{{ survey.etiqueta }}</span>
               <div class="bar-track">
-                <div class="bar-fill" [style.width]="barWidth(survey.group) + '%'"></div>
+                <div class="bar-fill" [style.width]="barWidth(survey) + '%'"></div>
               </div>
               <span class="bar-count">{{ countsMap[survey.group] ?? 0 }}</span>
             </div>
@@ -129,6 +149,12 @@ import { StudyDetail, StudySurvey } from '../core/models';
     .btn-survey:hover { background:#eff6ff; }
 
     .panel { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:1.5rem; }
+    .target-section { margin-bottom:1.5rem; }
+    .target-section h2 { margin:0 0 1rem; font-size:1rem; }
+    .target-list { display:flex; flex-wrap:wrap; gap:.75rem; }
+    .target-item { display:grid; gap:.2rem; min-width:140px; padding:.7rem .85rem; border:1px solid #e2e8f0; border-radius:9px; }
+    .target-item strong { color:#334155; font-size:.82rem; }
+    .target-item span { color:#64748b; font-size:.75rem; }
     .progress-section h2 { margin:0 0 1.2rem; font-size:1rem; }
     .bars { display:grid; gap:.85rem; }
     .bar-row { display:grid; grid-template-columns:110px 1fr 40px; align-items:center; gap:.75rem; }
@@ -186,8 +212,17 @@ export class EstudioDetailComponent implements OnInit, OnDestroy {
     return status === 'activo' ? 'Activo' : status === 'cerrado' ? 'Cerrado' : 'Borrador';
   }
 
-  barWidth(group: string): number {
+  responseCount(survey: StudySurvey): number {
+    return this.countsMap[survey.group] ?? 0;
+  }
+
+  barWidth(survey: StudySurvey): number {
+    const count = this.responseCount(survey);
+    if (survey.target_count !== null) {
+      if (survey.target_count === 0) return count > 0 ? 100 : 0;
+      return Math.min(100, Math.round((count / survey.target_count) * 100));
+    }
     const max = Math.max(...Object.values(this.countsMap).map((v) => v ?? 0), 1);
-    return Math.round(((this.countsMap[group] ?? 0) / max) * 100);
+    return Math.round((count / max) * 100);
   }
 }

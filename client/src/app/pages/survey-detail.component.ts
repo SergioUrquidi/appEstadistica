@@ -8,12 +8,6 @@ import { Question, QuestionType, SurveyDetail, SurveyMode, SurveyReport } from '
 import { SocketService } from '../core/socket.service';
 import { ButtonComponent } from '../shared/button.component';
 
-interface Invitation {
-  group: string;
-  url: string;
-  qrCode: string;
-}
-
 interface OptionDraft {
   label: string;
   isCorrect: boolean;
@@ -146,40 +140,12 @@ interface OptionDraft {
         </section>
         }
       } @else {
-        <div class="dashboard-grid">
-          <section class="panel metrics">
-            <div class="metric"><span>Respuestas</span><strong>{{ report?.summary?.response_count ?? 0 }}</strong><small>Actualización en tiempo real</small></div>
-            <div class="metric"><span>Participantes</span><strong>{{ report?.summary?.participants_count ?? 0 }}</strong><small>Respuestas registradas</small></div>
-            <div class="metric"><span>Jurados</span><strong>{{ report?.summary?.judges_count ?? 0 }}</strong><small>Respuestas registradas</small></div>
-            <div class="metric"><span>Expositores</span><strong>{{ report?.summary?.exhibitors_count ?? 0 }}</strong><small>Respuestas registradas</small></div>
-          </section>
-
-          <section class="panel">
-            <h2>Invitaciones QR</h2><p class="muted">Cada código admite una sola respuesta y se entrega sin datos personales del encuestado.</p>
-            <form class="invite-form" (ngSubmit)="generateInvitations()">
-              <label>Grupo
-                <select name="group" [(ngModel)]="group">
-                  <option value="participants">Participantes</option><option value="judges">Jurados</option><option value="exhibitors">Expositores</option>
-                </select>
-              </label>
-              <label>Cantidad
-                <input name="count" type="number" min="1" max="100" [(ngModel)]="inviteCount" required>
-              </label>
-              <app-button type="submit" variant="secondary" [disabled]="busy">Generar QR</app-button>
-            </form>
-            @if (error) { <p class="error" role="alert">{{ error }}</p> }
-            @if (invitations.length) {
-              <div class="invitation-list">
-                @for (invitation of invitations; track invitation.url) {
-                  <article class="invitation">
-                    <img [src]="invitation.qrCode" alt="Código QR de acceso único">
-                    <div><strong>{{ groupLabel(invitation.group) }}</strong><a [href]="invitation.url" target="_blank" rel="noopener">{{ invitation.url }}</a><small>Guarda o imprime este código; no se volverá a mostrar.</small></div>
-                  </article>
-                }
-              </div>
-            }
-          </section>
-        </div>
+        <section class="panel metrics">
+          <div class="metric"><span>Respuestas</span><strong>{{ report?.summary?.response_count ?? 0 }}</strong><small>Actualización en tiempo real</small></div>
+          <div class="metric"><span>Participantes</span><strong>{{ report?.summary?.participants_count ?? 0 }}</strong><small>Respuestas registradas</small></div>
+          <div class="metric"><span>Jurados</span><strong>{{ report?.summary?.judges_count ?? 0 }}</strong><small>Respuestas registradas</small></div>
+          <div class="metric"><span>Expositores</span><strong>{{ report?.summary?.exhibitors_count ?? 0 }}</strong><small>Respuestas registradas</small></div>
+        </section>
 
         <section class="panel report-panel">
           <div class="section-title"><div><h2>Resultados estadísticos</h2><p class="muted">Cálculos sobre las respuestas recibidas, sin datos de muestra.</p></div>
@@ -262,22 +228,14 @@ interface OptionDraft {
     .remove-option,.add-option { padding:.55rem .75rem; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#334155; font:inherit; cursor:pointer; }
     .add-option { justify-self:start; }
     .number { display:grid; place-items:center; min-width:1.6rem; height:1.6rem; border-radius:50%; color:#185adb; background:#e9f0ff; font-weight:800; }
-    .question-form,.invite-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.8rem; margin-top:1rem; }
+    .question-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.8rem; margin-top:1rem; }
     label { display:grid; gap:.4rem; color:#334155; font-size:.86rem; font-weight:700; }
     input,select,textarea { width:100%; padding:.7rem; border:1px solid #cbd5e1; border-radius:8px; font:inherit; }
     .wide { grid-column:1/-1; }
-    .dashboard-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:1rem; }
     .metrics { display:grid; grid-template-columns:repeat(2,1fr); gap:1rem; align-content:center; }
     .metric { padding:.85rem; border-radius:10px; background:#f8fafc; }
     .metric span,.metric small { display:block; color:#64748b; font-size:.78rem; }
     .metric strong { display:block; margin:.2rem 0; font-size:1.8rem; }
-    .invite-form { grid-template-columns:1fr 100px auto; align-items:end; }
-    .invitation-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:.8rem; margin-top:1rem; }
-    .invitation { display:flex; align-items:center; gap:.8rem; min-width:0; padding:.75rem; border:1px solid #e2e8f0; border-radius:10px; }
-    .invitation img { width:92px; height:92px; }
-    .invitation div { display:grid; min-width:0; gap:.35rem; }
-    .invitation a { overflow-wrap:anywhere; color:#185adb; font-size:.78rem; }
-    .invitation small { font-size:.72rem; }
     .report-panel { margin-top:1rem; }
     .result { margin-top:1.2rem; padding:1rem 0; border-top:1px solid #e2e8f0; }
     .stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(105px,1fr)); gap:.6rem; }
@@ -291,8 +249,7 @@ interface OptionDraft {
     .version { color:#64748b; font-size:.8rem; }
     .error { color:#b42318; }
     .empty-note { padding:1rem; color:#64748b; background:#f8fafc; border-radius:9px; }
-    @media(max-width:760px) { .dashboard-grid { grid-template-columns:1fr; } }
-    @media(max-width:560px) { .question-form,.invite-form,.mode-form { grid-template-columns:1fr; } .page-head { align-items:start; flex-direction:column; } .page-head app-button { width:100%; } .save-row { align-items:end; flex-wrap:wrap; } }
+    @media(max-width:560px) { .question-form,.mode-form { grid-template-columns:1fr; } .page-head { align-items:start; flex-direction:column; } .page-head app-button { width:100%; } .save-row { align-items:end; flex-wrap:wrap; } }
   `],
 })
 export class SurveyDetailComponent implements OnInit, OnDestroy {
@@ -307,9 +264,6 @@ export class SurveyDetailComponent implements OnInit, OnDestroy {
   minValue: number | null = null;
   maxValue: number | null = null;
   correctValue: number | null = null;
-  group = 'participants';
-  inviteCount = 1;
-  invitations: Invitation[] = [];
   analysis = '';
   draftVersion = 0;
   savedAt: string | null = null;
@@ -491,24 +445,6 @@ export class SurveyDetailComponent implements OnInit, OnDestroy {
     }
   }
 
-  async generateInvitations(): Promise<void> {
-    this.busy = true;
-    this.error = '';
-    this.invitations = [];
-    try {
-      const result = await firstValueFrom(this.http.post<{ invitations: Invitation[] }>(
-        `/api/surveys/${this.surveyId}/codes`,
-        { group: this.group, count: this.inviteCount },
-      ));
-      this.invitations = result.invitations;
-    } catch {
-      this.error = 'No se pudieron generar los códigos QR.';
-    } finally {
-      this.busy = false;
-      this.cdr.markForCheck();
-    }
-  }
-
   async loadReport(): Promise<void> {
     try {
       this.report = await firstValueFrom(this.http.get<SurveyReport>(`/api/surveys/${this.surveyId}/report`));
@@ -659,10 +595,6 @@ export class SurveyDetailComponent implements OnInit, OnDestroy {
       `${option.label}${option.is_correct ? ' (correcta)' : ''}`).join(', ');
     const hasKey = question.options.some((option) => option.is_correct);
     return `${question.question_type_label}; ${hasKey ? options : `sin clave de respuesta: ${options}`}`;
-  }
-
-  groupLabel(group: string): string {
-    return group === 'judges' ? 'Jurados' : group === 'exhibitors' ? 'Expositores' : 'Participantes';
   }
 
   format(value: number | null, suffix = ''): string {

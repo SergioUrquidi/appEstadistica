@@ -133,6 +133,45 @@ test('el procedimiento valida el uso único y calcula las estadísticas', {
     );
     assert.equal(updatedGroupAudit.rows[0].usuario_id, user.rows[0].id);
 
+    const createdStudy = await client.query(
+      `CALL estadistica.usp_crear_estudio(
+         $1, $2, $3, NULL, $4, $5::text[], $6, NULL
+       )`,
+      ['Feria de integración', '', 'mañana', user.rows[0].id, [groupName], 'conocimiento'],
+    );
+    const studyId = createdStudy.rows[0].p_estudio_id;
+    const targetBeforeInput = await client.query(
+      'SELECT count(*)::int AS total FROM estadistica.estudio_metas_grupo WHERE estudio_id = $1',
+      [studyId],
+    );
+    assert.equal(targetBeforeInput.rows[0].total, 0);
+    await client.query(
+      `INSERT INTO estadistica.estudio_metas_grupo
+         (estudio_id, grupo_id, cantidad_objetivo, creado_por)
+       VALUES ($1, $2, $3, $4)`,
+      [studyId, groupId, 17, user.rows[0].id],
+    );
+    const savedTarget = await client.query(
+      `SELECT cantidad_objetivo
+       FROM estadistica.estudio_metas_grupo
+       WHERE estudio_id = $1 AND grupo_id = $2`,
+      [studyId, groupId],
+    );
+    assert.equal(savedTarget.rows[0].cantidad_objetivo, 17);
+    await client.query(
+      `INSERT INTO estadistica.estudio_metas_encuestado
+         (estudio_id, grupo_encuestado, cantidad_objetivo, creado_por)
+       VALUES ($1, $2, $3, $4)`,
+      [studyId, 'participantes', 12, user.rows[0].id],
+    );
+    const savedRespondentTarget = await client.query(
+      `SELECT cantidad_objetivo
+       FROM estadistica.estudio_metas_encuestado
+       WHERE estudio_id = $1 AND grupo_encuestado = 'participantes'`,
+      [studyId],
+    );
+    assert.equal(savedRespondentTarget.rows[0].cantidad_objetivo, 12);
+
     const blockedDelete = await client.query(
       'CALL estadistica.usp_eliminar_grupo($1, $2, NULL, NULL)',
       [groupId, user.rows[0].id],
@@ -191,6 +230,12 @@ test('el procedimiento valida el uso único y calcula las estadísticas', {
       if (value === 4) duplicateTokenHash = tokenHash;
       assert.ok(code.rows[0].id);
     }
+
+    const usedInvitation = await client.query(
+      'SELECT * FROM estadistica.fn_validar_invitacion($1)',
+      [correctTokenHash],
+    );
+    assert.ok(usedInvitation.rows[0]?.used_at);
 
     const correctNumericGrade = await client.query(
       'SELECT * FROM estadistica.fn_calificar_respuesta($1)',

@@ -1,9 +1,9 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Question, SubmissionResult } from '../core/models';
 import { ButtonComponent } from '../shared/button.component';
 
@@ -23,8 +23,8 @@ interface PublicSurvey {
   template: `
     <section class="response-card">
       @if (submitted) {
-        <div class="success-mark">✓</div><h1>¡Respuesta recibida!</h1>
-        <p>Gracias por participar. Este código ya no puede volver a utilizarse.</p>
+        <div class="success-mark">✓</div><h1>¡Gracias por su colaboración!</h1>
+        <p>Su respuesta fue recibida correctamente.</p>
         @if (result; as submissionResult) {
           @if (!submissionResult.grades_answers) {
             <p class="muted">
@@ -157,6 +157,7 @@ export class RespondComponent implements OnInit {
   constructor(
     private readonly route: ActivatedRoute,
     private readonly http: HttpClient,
+    private readonly router: Router,
     private readonly cdr: ChangeDetectorRef,
   ) {}
 
@@ -168,7 +169,8 @@ export class RespondComponent implements OnInit {
       for (const question of this.survey.questions) {
         this.answers[question.id] = question.allows_multiple ? [] : null;
       }
-    } catch {
+    } catch (error: unknown) {
+      if (await this.redirectIfAlreadyAnswered(error)) return;
       this.error = 'El enlace no es válido, venció o ya fue utilizado.';
     } finally {
       this.cdr.markForCheck();
@@ -196,12 +198,23 @@ export class RespondComponent implements OnInit {
       }));
       this.result = submission.result;
       this.submitted = true;
-    } catch {
+    } catch (error: unknown) {
+      if (await this.redirectIfAlreadyAnswered(error)) return;
       this.error = 'No se pudo registrar la respuesta. Verifica los valores o solicita una nueva invitación.';
     } finally {
       this.busy = false;
       this.cdr.markForCheck();
     }
+  }
+
+  private async redirectIfAlreadyAnswered(error: unknown): Promise<boolean> {
+    if (!(error instanceof HttpErrorResponse)
+        || error.status !== 410
+        || error.error?.code !== 'INVITATION_ALREADY_USED') {
+      return false;
+    }
+    await this.router.navigateByUrl('/encuesta-respondida', { replaceUrl: true });
+    return true;
   }
 
   hasAnswer(question: Question): boolean {
