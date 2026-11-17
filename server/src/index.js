@@ -423,37 +423,52 @@ app.post('/api/surveys/:surveyId/activate', authenticate, asyncRoute(async (req,
   return res.json({ id: survey.id, status: 'active' });
 }));
 
-app.get('/api/surveys/:surveyId/cupo', authenticate, asyncRoute(async (req, res) => {
+app.get('/api/surveys/:surveyId/cupos', authenticate, asyncRoute(async (req, res) => {
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
   const result = await pool.query(
-    'SELECT * FROM estadistica.fn_cupo_encuesta($1)', [survey.id],
+    'SELECT * FROM estadistica.fn_cupos_encuesta($1)', [survey.id],
   );
-  const row = result.rows[0] ?? { cupo_total: null, cupo_generados: 0, cupo_disponible: null };
-  return res.json({
-    cupoTotal: row.cupo_total !== null ? Number(row.cupo_total) : null,
-    cupoGenerados: Number(row.cupo_generados),
-    cupoDisponible: row.cupo_disponible !== null ? Number(row.cupo_disponible) : null,
-  });
+  return res.json(result.rows.map((r) => ({
+    grupoEncuestado: r.grupo_encuestado,
+    cupo: Number(r.cupo),
+    cupoGenerados: Number(r.cupo_generados),
+    cupoDisponible: Number(r.cupo_disponible),
+  })));
 }));
 
-app.put('/api/surveys/:surveyId/cupo', authenticate, allowRoles('superuser'), asyncRoute(async (req, res) => {
+app.put('/api/surveys/:surveyId/cupos/:grupo', authenticate, allowRoles('superuser'), asyncRoute(async (req, res) => {
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
+  const grupo = req.params.grupo;
+  const allowedGroup = await pool.query(
+    'SELECT estadistica.fn_grupo_encuestado_activo($1) AS activo', [grupo],
+  );
+  if (!allowedGroup.rows[0]?.activo) return res.status(400).json({ error: 'El tipo de encuestado no existe.' });
   const input = validate(z.object({
-    cupo: z.number().int().min(1).max(10000).nullable(),
+    cupo: z.number().int().min(0).max(10000),
   }), req.body);
   await pool.query(
-    'CALL estadistica.usp_set_cupo_encuesta($1, $2, $3)',
-    [survey.id, input.cupo, req.user.sub],
+    'CALL estadistica.usp_set_cupo_encuesta($1, $2, $3, $4)',
+    [survey.id, grupo, input.cupo, req.user.sub],
   );
-  const result = await pool.query('SELECT * FROM estadistica.fn_cupo_encuesta($1)', [survey.id]);
-  const row = result.rows[0] ?? { cupo_total: null, cupo_generados: 0, cupo_disponible: null };
-  return res.json({
-    cupoTotal: row.cupo_total !== null ? Number(row.cupo_total) : null,
-    cupoGenerados: Number(row.cupo_generados),
-    cupoDisponible: row.cupo_disponible !== null ? Number(row.cupo_disponible) : null,
-  });
+  const result = await pool.query('SELECT * FROM estadistica.fn_cupos_encuesta($1)', [survey.id]);
+  return res.json(result.rows.map((r) => ({
+    grupoEncuestado: r.grupo_encuestado,
+    cupo: Number(r.cupo),
+    cupoGenerados: Number(r.cupo_generados),
+    cupoDisponible: Number(r.cupo_disponible),
+  })));
+}));
+
+app.delete('/api/surveys/:surveyId/cupos/:grupo', authenticate, allowRoles('superuser'), asyncRoute(async (req, res) => {
+  const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
+  if (error) return res.status(status).json({ error });
+  await pool.query(
+    'CALL estadistica.usp_del_cupo_encuesta($1, $2)',
+    [survey.id, req.params.grupo],
+  );
+  return res.status(204).end();
 }));
 
 app.post('/api/surveys/:surveyId/codes', authenticate, asyncRoute(async (req, res) => {
@@ -478,14 +493,17 @@ app.post('/api/surveys/:surveyId/codes', authenticate, asyncRoute(async (req, re
     'SELECT estadistica.fn_grupo_encuestado_activo($1) AS activo', [input.respondentGroup],
   );
   if (!allowedGroup.rows[0]?.activo) return res.status(400).json({ error: 'El tipo de encuestado no existe.' });
-  const cupoResult = await pool.query('SELECT * FROM estadistica.fn_cupo_encuesta($1)', [survey.id]);
-  const cupoRow = cupoResult.rows[0];
-  if (cupoRow?.cupo_disponible !== null && Number(cupoRow.cupo_disponible) < input.count) {
-    const disp = Number(cupoRow.cupo_disponible);
+  const disponible = await pool.query(
+    'SELECT estadistica.fn_cupo_grupo_encuesta($1, $2) AS disponible',
+    [survey.id, input.respondentGroup],
+  );
+  const disp = disponible.rows[0]?.disponible;
+  if (disp !== null && disp !== undefined && Number(disp) < input.count) {
+    const n = Number(disp);
     return res.status(409).json({
-      error: disp === 0
-        ? 'El cupo de esta encuesta se agotó. No se pueden generar más invitaciones.'
-        : `Solo quedan ${disp} QR disponibles en el cupo asignado.`,
+      error: n === 0
+        ? `El cupo para "${input.respondentGroup}" se agotó en esta encuesta.`
+        : `Solo quedan ${n} QR disponibles para "${input.respondentGroup}".`,
     });
   }
   const invitations = [];

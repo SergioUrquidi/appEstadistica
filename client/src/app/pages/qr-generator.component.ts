@@ -14,10 +14,11 @@ interface Invitation {
   qrCode: string;
 }
 
-interface CupoInfo {
-  cupoTotal: number | null;
+interface CupoGrupo {
+  grupoEncuestado: string;
+  cupo: number;
   cupoGenerados: number;
-  cupoDisponible: number | null;
+  cupoDisponible: number;
 }
 
 @Component({
@@ -48,28 +49,34 @@ interface CupoInfo {
 
         @if (isSuperuser && surveyId) {
           <div class="cupo-editor">
-            <h2>Cupo de invitaciones</h2>
-            <p class="muted cupo-hint">Establece el límite máximo de QR que se pueden generar para esta encuesta. Deja vacío para sin límite.</p>
-            <div class="cupo-form">
-              <input type="number" min="1" max="10000" step="1" [(ngModel)]="cupoInput" placeholder="Sin límite">
-              <app-button (click)="saveCupo()" [disabled]="busyCupo">{{ busyCupo ? 'Guardando…' : 'Guardar cupo' }}</app-button>
+            <h2>Cupos por tipo de encuestado</h2>
+            <p class="muted cupo-hint">Define el límite de QR para cada tipo. Los cambios aplican de inmediato.</p>
+            <div class="cupo-table-wrap">
+              <table class="cupo-table">
+                <thead><tr><th>Tipo</th><th>Cupo asignado</th><th>Generados</th><th>Disponibles</th><th></th></tr></thead>
+                <tbody>
+                  @for (rg of respondentGroups; track rg.value) {
+                    <tr>
+                      <td class="grupo-name">{{ rg.label | titlecase }}</td>
+                      <td>
+                        <input class="cupo-input" type="number" min="0" max="10000" step="1"
+                          [(ngModel)]="cupoEdits[rg.value]"
+                          [placeholder]="getCupoPlaceholder(rg.value)">
+                      </td>
+                      <td class="num">{{ getCupoGrupo(rg.value)?.cupoGenerados ?? '—' }}</td>
+                      <td class="num" [class.agotado]="getCupoGrupo(rg.value)?.cupoDisponible === 0">
+                        {{ getCupoGrupo(rg.value)?.cupoDisponible ?? '—' }}
+                      </td>
+                      <td>
+                        <button class="btn-save" (click)="saveCupo(rg.value)" [disabled]="busyCupo[rg.value]">
+                          {{ busyCupo[rg.value] ? '…' : 'Guardar' }}
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
             </div>
-          </div>
-        }
-
-        @if (surveyId && cupo !== undefined) {
-          <div class="cupo-meter" [class.agotado]="cupo.cupoDisponible === 0">
-            <span class="cupo-label">Cupo disponible</span>
-            @if (cupo.cupoTotal === null) {
-              <span class="cupo-value unlimited">Sin límite</span>
-            } @else {
-              <span class="cupo-value">
-                <strong>{{ cupo.cupoDisponible }}</strong> / {{ cupo.cupoTotal }}
-              </span>
-              <div class="cupo-bar">
-                <div class="cupo-fill" [style.width.%]="cupoPercent"></div>
-              </div>
-            }
           </div>
         }
 
@@ -83,7 +90,7 @@ interface CupoInfo {
             </select>
           </label>
           <label>Tipo de encuestado
-            <select name="respondentGroup" [(ngModel)]="respondentGroup" required>
+            <select name="respondentGroup" [(ngModel)]="respondentGroup" (ngModelChange)="cdr.markForCheck()" required>
               <option value="" disabled>Selecciona el tipo</option>
               @for (group of respondentGroups; track group.value) {
                 <option [value]="group.value">{{ group.label | titlecase }}</option>
@@ -91,7 +98,7 @@ interface CupoInfo {
             </select>
           </label>
           @if (isSuperuser) {
-            <label>Cantidad de QR
+            <label>Cantidad
               <input name="count" type="number" min="1" max="100" step="1" [(ngModel)]="count" required>
             </label>
           }
@@ -99,8 +106,10 @@ interface CupoInfo {
             <app-button type="submit" [disabled]="busy || !canGenerate">
               {{ busy ? 'Generando…' : 'Generar QR' }}
             </app-button>
-            @if (cupo !== undefined && cupo.cupoDisponible === 0) {
+            @if (selectedCupo && selectedCupo.cupoDisponible === 0) {
               <span class="cupo-warning">Cupo agotado</span>
+            } @else if (selectedCupo && selectedCupo.cupoDisponible > 0) {
+              <span class="cupo-badge">{{ selectedCupo.cupoDisponible }} disponibles</span>
             }
           </div>
         </form>
@@ -135,23 +144,25 @@ interface CupoInfo {
     .panel { margin:1rem 0; padding:1.25rem; border:1px solid #e2e8f0; border-radius:14px; background:white; }
     .cupo-editor { margin-bottom:1.25rem; padding-bottom:1.25rem; border-bottom:1px solid #f1f5f9; }
     .cupo-hint { font-size:.82rem; margin:.25rem 0 .75rem; }
-    .cupo-form { display:flex; gap:.6rem; align-items:center; }
-    .cupo-form input { width:140px; padding:.7rem; border:1px solid #cbd5e1; border-radius:8px; font:inherit; }
-    .cupo-meter { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem 1rem; margin-bottom:1rem; padding:.75rem 1rem; border:1px solid #e2e8f0; border-radius:10px; background:#f8fafc; }
-    .cupo-meter.agotado { border-color:#fca5a5; background:#fff5f5; }
-    .cupo-label { font-size:.82rem; font-weight:700; color:#334155; }
-    .cupo-value { font-size:.9rem; color:#334155; }
-    .cupo-value.unlimited { color:#059669; font-weight:700; }
-    .cupo-value strong { font-size:1.1rem; color:#185adb; }
-    .cupo-meter.agotado .cupo-value strong { color:#dc2626; }
-    .cupo-bar { width:100%; height:6px; background:#e2e8f0; border-radius:99px; overflow:hidden; }
-    .cupo-fill { height:100%; background:#185adb; border-radius:99px; transition:width .4s ease; }
-    .cupo-meter.agotado .cupo-fill { background:#dc2626; }
-    .generator-form { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) 160px auto; gap:.8rem; align-items:end; margin-top:1rem; }
+    .cupo-table-wrap { overflow-x:auto; }
+    .cupo-table { width:100%; border-collapse:collapse; font-size:.88rem; }
+    .cupo-table thead { background:#f8fafc; border-bottom:1px solid #e2e8f0; }
+    .cupo-table th { padding:.6rem .75rem; color:#64748b; font-size:.75rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; white-space:nowrap; text-align:left; }
+    .cupo-table td { padding:.55rem .75rem; border-bottom:1px solid #f1f5f9; color:#334155; vertical-align:middle; }
+    .cupo-table tbody tr:last-child td { border-bottom:0; }
+    .grupo-name { font-weight:600; }
+    .num { text-align:center; font-variant-numeric:tabular-nums; }
+    .num.agotado { color:#dc2626; font-weight:700; }
+    .cupo-input { width:90px; padding:.45rem .6rem; border:1px solid #cbd5e1; border-radius:7px; font:inherit; font-size:.88rem; }
+    .btn-save { padding:.4rem .8rem; border:1px solid #185adb; border-radius:7px; background:white; color:#185adb; font:inherit; font-size:.82rem; font-weight:700; cursor:pointer; }
+    .btn-save:hover:not(:disabled) { background:#185adb; color:white; }
+    .btn-save:disabled { opacity:.5; cursor:not-allowed; }
+    .generator-form { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) 130px auto; gap:.8rem; align-items:end; margin-top:1rem; }
     label { display:grid; gap:.4rem; color:#334155; font-size:.86rem; font-weight:700; }
     input,select { width:100%; padding:.7rem; border:1px solid #cbd5e1; border-radius:8px; font:inherit; }
     .submit-wrap { display:flex; flex-direction:column; gap:.4rem; align-items:flex-start; }
     .cupo-warning { font-size:.78rem; font-weight:700; color:#dc2626; }
+    .cupo-badge { font-size:.78rem; font-weight:700; color:#059669; }
     .error { color:#b42318; }
     .results { margin-top:1.2rem; }
     .invitation-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:.8rem; margin-top:1rem; }
@@ -161,7 +172,7 @@ interface CupoInfo {
     .invitation a { overflow-wrap:anywhere; color:#185adb; font-size:.78rem; }
     .download-link { font-weight:700; }
     @media(max-width:860px) { .generator-form { grid-template-columns:1fr 1fr; } }
-    @media(max-width:640px) { .generator-form { grid-template-columns:1fr; } .cupo-form { flex-wrap:wrap; } }
+    @media(max-width:640px) { .generator-form { grid-template-columns:1fr; } }
   `],
 })
 export class QrGeneratorComponent implements OnInit, OnDestroy {
@@ -172,12 +183,12 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
   surveyId = '';
   respondentGroup = '';
   count: number | null = 1;
-  cupo?: CupoInfo;
-  cupoInput: number | null = null;
+  cupos: CupoGrupo[] = [];
+  cupoEdits: Record<string, number | null> = {};
+  busyCupo: Record<string, boolean> = {};
   invitations: Invitation[] = [];
   loading = true;
   busy = false;
-  busyCupo = false;
   error = '';
 
   private groupsLoaded = false;
@@ -187,7 +198,7 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
   constructor(
     private readonly route: ActivatedRoute,
     private readonly http: HttpClient,
-    private readonly cdr: ChangeDetectorRef,
+    readonly cdr: ChangeDetectorRef,
     readonly auth: AuthService,
   ) {}
 
@@ -199,26 +210,24 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
     return this.groups.find((group) => group.id === this.selectedGroupId);
   }
 
-  get validCount(): boolean {
-    if (this.isSuperuser) {
-      return this.count !== null
-        && Number.isInteger(this.count)
-        && this.count >= 1
-        && this.count <= 100;
-    }
-    return true;
+  get selectedCupo(): CupoGrupo | undefined {
+    return this.respondentGroup ? this.cupos.find((c) => c.grupoEncuestado === this.respondentGroup) : undefined;
   }
 
   get canGenerate(): boolean {
     if (!this.surveyId || !this.respondentGroup) return false;
-    if (!this.validCount) return false;
-    if (this.cupo !== undefined && this.cupo.cupoDisponible === 0) return false;
+    if (this.isSuperuser && (this.count === null || this.count < 1)) return false;
+    if (this.selectedCupo?.cupoDisponible === 0) return false;
     return true;
   }
 
-  get cupoPercent(): number {
-    if (!this.cupo?.cupoTotal) return 0;
-    return Math.round((this.cupo.cupoDisponible ?? 0) / this.cupo.cupoTotal * 100);
+  getCupoGrupo(grupo: string): CupoGrupo | undefined {
+    return this.cupos.find((c) => c.grupoEncuestado === grupo);
+  }
+
+  getCupoPlaceholder(grupo: string): string {
+    const c = this.getCupoGrupo(grupo);
+    return c ? String(c.cupo) : 'Sin límite';
   }
 
   async ngOnInit(): Promise<void> {
@@ -254,7 +263,7 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
       this.selectedGroupId = '';
       this.surveys = [];
       this.surveyId = '';
-      this.cupo = undefined;
+      this.cupos = [];
       this.error = routeGroupId ? 'El grupo seleccionado ya no está activo.' : '';
       this.cdr.markForCheck();
       return;
@@ -265,7 +274,7 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
     this.error = '';
     this.surveys = [];
     this.surveyId = '';
-    this.cupo = undefined;
+    this.cupos = [];
     this.invitations = [];
     const requestId = ++this.surveyRequest;
     try {
@@ -274,7 +283,7 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
       if (requestId !== this.surveyRequest) return;
       this.surveys = surveys.filter((survey) => survey.status === 'active');
       this.surveyId = this.surveys[0]?.id ?? '';
-      if (this.surveyId) await this.loadCupo();
+      if (this.surveyId) await this.loadCupos();
     } catch {
       if (requestId === this.surveyRequest) this.error = 'No se pudieron cargar las encuestas del grupo.';
     } finally {
@@ -287,32 +296,43 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
 
   async onSurveyChange(): Promise<void> {
     this.invitations = [];
-    this.cupo = undefined;
-    if (this.surveyId) await this.loadCupo();
+    this.cupos = [];
+    if (this.surveyId) await this.loadCupos();
     this.cdr.markForCheck();
   }
 
-  private async loadCupo(): Promise<void> {
+  private async loadCupos(): Promise<void> {
     try {
-      this.cupo = await firstValueFrom(this.http.get<CupoInfo>(`/api/surveys/${this.surveyId}/cupo`));
-      this.cupoInput = this.cupo.cupoTotal;
+      this.cupos = await firstValueFrom(this.http.get<CupoGrupo[]>(`/api/surveys/${this.surveyId}/cupos`));
+      this.syncCupoEdits();
     } catch {
-      this.cupo = undefined;
+      this.cupos = [];
     }
   }
 
-  async saveCupo(): Promise<void> {
+  private syncCupoEdits(): void {
+    const edits: Record<string, number | null> = {};
+    for (const rg of this.respondentGroups) {
+      const c = this.getCupoGrupo(rg.value);
+      edits[rg.value] = c ? c.cupo : null;
+    }
+    this.cupoEdits = edits;
+  }
+
+  async saveCupo(grupo: string): Promise<void> {
     if (!this.surveyId) return;
-    this.busyCupo = true;
+    const val = this.cupoEdits[grupo];
+    if (val === null || val === undefined) return;
+    this.busyCupo = { ...this.busyCupo, [grupo]: true };
     this.error = '';
     try {
-      this.cupo = await firstValueFrom(
-        this.http.put<CupoInfo>(`/api/surveys/${this.surveyId}/cupo`, { cupo: this.cupoInput }),
+      this.cupos = await firstValueFrom(
+        this.http.put<CupoGrupo[]>(`/api/surveys/${this.surveyId}/cupos/${encodeURIComponent(grupo)}`, { cupo: val }),
       );
     } catch {
-      this.error = 'No se pudo guardar el cupo.';
+      this.error = `No se pudo guardar el cupo de "${grupo}".`;
     } finally {
-      this.busyCupo = false;
+      this.busyCupo = { ...this.busyCupo, [grupo]: false };
       this.cdr.markForCheck();
     }
   }
@@ -333,7 +353,7 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
         },
       ));
       this.invitations = result.invitations;
-      await this.loadCupo();
+      await this.loadCupos();
     } catch (err: unknown) {
       const msg = (err as { error?: { error?: string } })?.error?.error;
       this.error = msg ?? 'No se pudieron generar las invitaciones QR.';
