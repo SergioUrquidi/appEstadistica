@@ -12,7 +12,7 @@ import { ButtonComponent } from '../shared/button.component';
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, ButtonComponent],
   template: `
-    <div class="page-head">
+    <header class="page-head">
       <div><p class="eyebrow">Panel de trabajo</p><h1>Encuestas</h1><p class="muted">Crea y administra formularios con tipos de pregunta configurables.</p></div>
       <form class="create-form" (ngSubmit)="createSurvey()">
         <input name="title" [(ngModel)]="title" placeholder="Nombre de la nueva encuesta" maxlength="200" required>
@@ -24,7 +24,7 @@ import { ButtonComponent } from '../shared/button.component';
         </select>
         <app-button type="submit" [disabled]="busy || !modeCode">Crear encuesta</app-button>
       </form>
-    </div>
+    </header>
     @if (selectedMode) { <p class="mode-description">{{ selectedMode.description }}</p> }
     @if (error) { <p class="error" role="alert">{{ error }}</p> }
     @if (!surveys.length && !error) {
@@ -44,7 +44,7 @@ import { ButtonComponent } from '../shared/button.component';
   `,
   styles: [`
     .page-head { display:flex; align-items:end; justify-content:space-between; gap:1.5rem; flex-wrap:wrap; margin:1.5rem 0 2rem; }
-    h1 { margin:.25rem 0; font-size:2rem; }
+    h1 { margin:.25rem 0; font-size:clamp(1.5rem,4vw,2rem); }
     .eyebrow { color:#185adb; font-size:.75rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
     .muted,.description { color:#64748b; }
     .create-form { display:grid; grid-template-columns:minmax(200px,1fr) minmax(190px,auto) auto; gap:.6rem; }

@@ -203,7 +203,7 @@ interface OptionDraft {
     .back-link { color:#185adb; text-decoration:none; font-weight:700; font-size:.88rem; }
     .page-head,.section-title,.save-row { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
     .page-head { margin:1.2rem 0 1.5rem; }
-    h1 { margin:.25rem 0; font-size:2rem; }
+    h1 { margin:.25rem 0; font-size:clamp(1.5rem,4vw,2rem); }
     h2 { margin:.2rem 0 .4rem; font-size:1.2rem; }
     h3 { margin:.2rem 0 1rem; font-size:1.05rem; }
     h4 { margin:1.2rem 0 .65rem; }
