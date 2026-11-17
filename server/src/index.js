@@ -423,14 +423,50 @@ app.post('/api/surveys/:surveyId/activate', authenticate, asyncRoute(async (req,
   return res.json({ id: survey.id, status: 'active' });
 }));
 
+app.get('/api/surveys/:surveyId/cupo', authenticate, asyncRoute(async (req, res) => {
+  const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
+  if (error) return res.status(status).json({ error });
+  const result = await pool.query(
+    'SELECT * FROM estadistica.fn_cupo_encuesta($1)', [survey.id],
+  );
+  const row = result.rows[0] ?? { cupo_total: null, cupo_generados: 0, cupo_disponible: null };
+  return res.json({
+    cupoTotal: row.cupo_total !== null ? Number(row.cupo_total) : null,
+    cupoGenerados: Number(row.cupo_generados),
+    cupoDisponible: row.cupo_disponible !== null ? Number(row.cupo_disponible) : null,
+  });
+}));
+
+app.put('/api/surveys/:surveyId/cupo', authenticate, allowRoles('superuser'), asyncRoute(async (req, res) => {
+  const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
+  if (error) return res.status(status).json({ error });
+  const input = validate(z.object({
+    cupo: z.number().int().min(1).max(10000).nullable(),
+  }), req.body);
+  await pool.query(
+    'CALL estadistica.usp_set_cupo_encuesta($1, $2, $3)',
+    [survey.id, input.cupo, req.user.sub],
+  );
+  const result = await pool.query('SELECT * FROM estadistica.fn_cupo_encuesta($1)', [survey.id]);
+  const row = result.rows[0] ?? { cupo_total: null, cupo_generados: 0, cupo_disponible: null };
+  return res.json({
+    cupoTotal: row.cupo_total !== null ? Number(row.cupo_total) : null,
+    cupoGenerados: Number(row.cupo_generados),
+    cupoDisponible: row.cupo_disponible !== null ? Number(row.cupo_disponible) : null,
+  });
+}));
+
 app.post('/api/surveys/:surveyId/codes', authenticate, asyncRoute(async (req, res) => {
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
   if (survey.status !== 'active') return res.status(409).json({ error: 'Activa la encuesta antes de generar invitaciones.' });
+  const isSuperuser = req.user.role === 'superuser';
   const input = validate(z.object({
     surveyGroupId: z.string().uuid(),
     respondentGroup: z.string().trim().min(1),
-    count: z.number().int().min(1).max(100),
+    count: isSuperuser
+      ? z.number().int().min(1).max(100)
+      : z.number().int().min(1).max(1),
   }), req.body);
   const surveyGroup = await pool.query(
     'SELECT * FROM estadistica.fn_grupo_de_encuesta($1)', [survey.id],
@@ -442,6 +478,16 @@ app.post('/api/surveys/:surveyId/codes', authenticate, asyncRoute(async (req, re
     'SELECT estadistica.fn_grupo_encuestado_activo($1) AS activo', [input.respondentGroup],
   );
   if (!allowedGroup.rows[0]?.activo) return res.status(400).json({ error: 'El tipo de encuestado no existe.' });
+  const cupoResult = await pool.query('SELECT * FROM estadistica.fn_cupo_encuesta($1)', [survey.id]);
+  const cupoRow = cupoResult.rows[0];
+  if (cupoRow?.cupo_disponible !== null && Number(cupoRow.cupo_disponible) < input.count) {
+    const disp = Number(cupoRow.cupo_disponible);
+    return res.status(409).json({
+      error: disp === 0
+        ? 'El cupo de esta encuesta se agotó. No se pueden generar más invitaciones.'
+        : `Solo quedan ${disp} QR disponibles en el cupo asignado.`,
+    });
+  }
   const invitations = [];
   for (let index = 0; index < input.count; index += 1) {
     const token = crypto.randomBytes(24).toString('base64url');
