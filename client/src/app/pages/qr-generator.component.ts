@@ -7,6 +7,7 @@ import { firstValueFrom, Subscription } from 'rxjs';
 import { Group, RespondentGroup, Survey } from '../core/models';
 import { ButtonComponent } from '../shared/button.component';
 import { AuthService } from '../core/auth.service';
+import { SocketService } from '../core/socket.service';
 
 interface Invitation {
   respondentGroup: string;
@@ -19,6 +20,13 @@ interface CupoGrupo {
   cupo: number;
   cupoCompletados: number;
   cupoDisponible: number;
+}
+
+interface PendingCode {
+  id: string;
+  grupoEncuestado: string;
+  url: string;
+  creadoEn: string;
 }
 
 @Component({
@@ -90,7 +98,7 @@ interface CupoGrupo {
             </select>
           </label>
           <label>Tipo de encuestado
-            <select name="respondentGroup" [(ngModel)]="respondentGroup" (ngModelChange)="cdr.markForCheck()" required>
+            <select name="respondentGroup" [(ngModel)]="respondentGroup" (ngModelChange)="onRespondentGroupChange()" required>
               <option value="" disabled>Selecciona el tipo</option>
               @for (group of respondentGroups; track group.value) {
                 <option [value]="group.value">{{ group.label | titlecase }}</option>
@@ -134,6 +142,41 @@ interface CupoGrupo {
         </div>
       </section>
     }
+
+    @if (surveyId && respondentGroup) {
+      <section class="panel pending-panel">
+        <div class="pending-head">
+          <div>
+            <h2>QRs pendientes · <span class="grupo-badge">{{ respondentGroup | titlecase }}</span></h2>
+            <p class="muted">QRs generados que aún no han sido respondidos. Desaparecen automáticamente cuando se completa la encuesta.</p>
+          </div>
+          <button class="btn-refresh" (click)="refreshPending()" [disabled]="loadingPending" title="Actualizar lista">
+            {{ loadingPending ? '…' : '↻' }}
+          </button>
+        </div>
+        @if (loadingPending) {
+          <p class="muted">Cargando…</p>
+        } @else if (!pendingCodes.length) {
+          <p class="muted empty-pending">No hay QRs pendientes para este grupo en esta encuesta.</p>
+        } @else {
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>#</th><th>Enlace de acceso</th><th>Generado</th></tr></thead>
+              <tbody>
+                @for (code of pendingCodes; track code.id; let i = $index) {
+                  <tr>
+                    <td class="idx">{{ i + 1 }}</td>
+                    <td class="url-cell"><a [href]="code.url" target="_blank" rel="noopener">{{ code.url }}</a></td>
+                    <td class="date-cell">{{ code.creadoEn | date:'dd/MM/yyyy HH:mm' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <p class="pending-count">{{ pendingCodes.length }} pendiente{{ pendingCodes.length !== 1 ? 's' : '' }}</p>
+        }
+      </section>
+    }
   `,
   styles: [`
     .page-head { margin:1.5rem 0 2rem; }
@@ -171,6 +214,25 @@ interface CupoGrupo {
     .invitation div { display:grid; min-width:0; gap:.35rem; }
     .invitation a { overflow-wrap:anywhere; color:#185adb; font-size:.78rem; }
     .download-link { font-weight:700; }
+    .pending-panel { margin-top:1.2rem; }
+    .pending-head { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:.75rem; }
+    .pending-head h2 { margin:.2rem 0 .25rem; font-size:1.15rem; }
+    .grupo-badge { font-size:.82rem; font-weight:700; color:#185adb; }
+    .btn-refresh { padding:.4rem .75rem; border:1px solid #cbd5e1; border-radius:7px; background:white; color:#334155; font:inherit; font-size:1rem; cursor:pointer; flex-shrink:0; }
+    .btn-refresh:hover:not(:disabled) { background:#f8fafc; }
+    .btn-refresh:disabled { opacity:.5; cursor:not-allowed; }
+    .table-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; text-align:left; font-size:.88rem; }
+    thead { background:#f8fafc; border-bottom:1px solid #e2e8f0; }
+    th { padding:.6rem .75rem; color:#64748b; font-size:.75rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; white-space:nowrap; }
+    td { padding:.6rem .75rem; border-bottom:1px solid #f1f5f9; color:#334155; }
+    tbody tr:last-child td { border-bottom:0; }
+    tbody tr:hover td { background:#f8faff; }
+    .idx { width:2.5rem; text-align:center; color:#94a3b8; font-weight:700; font-size:.82rem; }
+    .url-cell a { color:#185adb; overflow-wrap:anywhere; font-size:.82rem; }
+    .date-cell { white-space:nowrap; color:#64748b; font-size:.82rem; }
+    .empty-pending { text-align:center; padding:1.5rem 0; }
+    .pending-count { margin:.75rem 0 0; font-size:.8rem; color:#64748b; text-align:right; }
     @media(max-width:860px) { .generator-form { grid-template-columns:1fr 1fr; } }
     @media(max-width:640px) { .generator-form { grid-template-columns:1fr; } }
   `],
@@ -187,6 +249,8 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
   cupoEdits: Record<string, number | null> = {};
   busyCupo: Record<string, boolean> = {};
   invitations: Invitation[] = [];
+  pendingCodes: PendingCode[] = [];
+  loadingPending = false;
   loading = true;
   busy = false;
   error = '';
@@ -194,12 +258,14 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
   private groupsLoaded = false;
   private routeSubscription?: Subscription;
   private surveyRequest = 0;
+  private stopWatchingSurvey?: () => void;
 
   constructor(
     private readonly route: ActivatedRoute,
     private readonly http: HttpClient,
     readonly cdr: ChangeDetectorRef,
     readonly auth: AuthService,
+    private readonly socket: SocketService,
   ) {}
 
   get isSuperuser(): boolean {
@@ -253,6 +319,7 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.routeSubscription?.unsubscribe();
+    this.stopWatchingSurvey?.();
   }
 
   private async loadSurveys(routeGroupId: string | null): Promise<void> {
@@ -283,7 +350,10 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
       if (requestId !== this.surveyRequest) return;
       this.surveys = surveys.filter((survey) => survey.status === 'active');
       this.surveyId = this.surveys[0]?.id ?? '';
-      if (this.surveyId) await this.loadCupos();
+      if (this.surveyId) {
+        await this.loadCupos();
+        this.watchForResponses();
+      }
     } catch {
       if (requestId === this.surveyRequest) this.error = 'No se pudieron cargar las encuestas del grupo.';
     } finally {
@@ -297,8 +367,51 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
   async onSurveyChange(): Promise<void> {
     this.invitations = [];
     this.cupos = [];
-    if (this.surveyId) await this.loadCupos();
+    this.pendingCodes = [];
+    this.stopWatchingSurvey?.();
+    this.stopWatchingSurvey = undefined;
+    if (this.surveyId) {
+      await this.loadCupos();
+      this.watchForResponses();
+    }
+    if (this.surveyId && this.respondentGroup) await this.loadPendingCodes();
     this.cdr.markForCheck();
+  }
+
+  async onRespondentGroupChange(): Promise<void> {
+    this.pendingCodes = [];
+    if (this.surveyId && this.respondentGroup) await this.loadPendingCodes();
+    this.cdr.markForCheck();
+  }
+
+  async refreshPending(): Promise<void> {
+    if (this.surveyId && this.respondentGroup) await this.loadPendingCodes();
+  }
+
+  private async loadPendingCodes(): Promise<void> {
+    if (!this.surveyId || !this.respondentGroup) return;
+    this.loadingPending = true;
+    this.cdr.markForCheck();
+    try {
+      const params = new HttpParams().set('grupo', this.respondentGroup);
+      this.pendingCodes = await firstValueFrom(
+        this.http.get<PendingCode[]>(`/api/surveys/${this.surveyId}/codes/pending`, { params }),
+      );
+    } catch {
+      this.pendingCodes = [];
+    } finally {
+      this.loadingPending = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private watchForResponses(): void {
+    if (!this.surveyId) return;
+    this.stopWatchingSurvey?.();
+    this.stopWatchingSurvey = this.socket.watchSurvey(this.surveyId, () => {
+      void this.loadPendingCodes();
+      void this.loadCupos();
+    });
   }
 
   private async loadCupos(): Promise<void> {
@@ -354,6 +467,7 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
       ));
       this.invitations = result.invitations;
       await this.loadCupos();
+      await this.loadPendingCodes();
     } catch (err: unknown) {
       const msg = (err as { error?: { error?: string } })?.error?.error;
       this.error = msg ?? 'No se pudieron generar las invitaciones QR.';

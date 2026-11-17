@@ -506,14 +506,15 @@ app.post('/api/surveys/:surveyId/codes', authenticate, asyncRoute(async (req, re
         : `Solo quedan ${n} QR disponibles para "${input.respondentGroup}".`,
     });
   }
+  const baseUrl = process.env.PUBLIC_APP_URL.replace(/\/$/, '');
   const invitations = [];
   for (let index = 0; index < input.count; index += 1) {
     const token = crypto.randomBytes(24).toString('base64url');
     await pool.query(
-      'CALL estadistica.usp_insertar_codigo_encuesta($1, $2, $3, $4)',
-      [survey.id, req.user.sub, input.respondentGroup, tokenHash(token)],
+      'CALL estadistica.usp_insertar_codigo_encuesta($1, $2, $3, $4, $5)',
+      [survey.id, req.user.sub, input.respondentGroup, tokenHash(token), token],
     );
-    const url = `${process.env.PUBLIC_APP_URL.replace(/\/$/, '')}/respond/${token}`;
+    const url = `${baseUrl}/respond/${token}`;
     invitations.push({
       respondentGroup: input.respondentGroup,
       url,
@@ -521,6 +522,23 @@ app.post('/api/surveys/:surveyId/codes', authenticate, asyncRoute(async (req, re
     });
   }
   return res.status(201).json({ invitations });
+}));
+
+app.get('/api/surveys/:surveyId/codes/pending', authenticate, asyncRoute(async (req, res) => {
+  const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
+  if (error) return res.status(status).json({ error });
+  const grupo = validate(z.string().trim().min(1), req.query.grupo);
+  const result = await pool.query(
+    'SELECT * FROM estadistica.fn_codigos_pendientes($1, $2)',
+    [survey.id, grupo],
+  );
+  const baseUrl = process.env.PUBLIC_APP_URL.replace(/\/$/, '');
+  return res.json(result.rows.map((r) => ({
+    id: r.id,
+    grupoEncuestado: r.grupo_encuestado,
+    url: `${baseUrl}/respond/${r.token}`,
+    creadoEn: r.creado_en,
+  })));
 }));
 
 app.get('/api/respond/:token', asyncRoute(async (req, res) => {
