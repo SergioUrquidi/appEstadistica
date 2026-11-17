@@ -533,12 +533,17 @@ app.get('/api/surveys/:surveyId/codes/pending', authenticate, asyncRoute(async (
     [survey.id, grupo],
   );
   const baseUrl = process.env.PUBLIC_APP_URL.replace(/\/$/, '');
-  return res.json(result.rows.map((r) => ({
-    id: r.id,
-    grupoEncuestado: r.grupo_encuestado,
-    url: `${baseUrl}/respond/${r.token}`,
-    creadoEn: r.creado_en,
-  })));
+  const rows = await Promise.all(result.rows.map(async (r) => {
+    const url = `${baseUrl}/respond/${r.token}`;
+    return {
+      id: r.id,
+      grupoEncuestado: r.grupo_encuestado,
+      url,
+      qrCode: await QRCode.toDataURL(url, { errorCorrectionLevel: 'M', margin: 1 }),
+      creadoEn: r.creado_en,
+    };
+  }));
+  return res.json(rows);
 }));
 
 app.get('/api/respond/:token', asyncRoute(async (req, res) => {

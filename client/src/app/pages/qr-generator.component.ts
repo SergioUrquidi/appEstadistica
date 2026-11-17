@@ -26,6 +26,7 @@ interface PendingCode {
   id: string;
   grupoEncuestado: string;
   url: string;
+  qrCode: string;
   creadoEn: string;
 }
 
@@ -161,14 +162,29 @@ interface PendingCode {
         } @else {
           <div class="table-wrap">
             <table>
-              <thead><tr><th>#</th><th>Enlace de acceso</th><th>Generado</th></tr></thead>
+              <thead><tr><th>#</th><th>Enlace de acceso</th><th>Generado</th><th class="th-qr">QR</th></tr></thead>
               <tbody>
                 @for (code of pendingCodes; track code.id; let i = $index) {
-                  <tr>
+                  <tr class="pending-row" (click)="expandedPendingId = expandedPendingId === code.id ? null : code.id">
                     <td class="idx">{{ i + 1 }}</td>
-                    <td class="url-cell"><a [href]="code.url" target="_blank" rel="noopener">{{ code.url }}</a></td>
+                    <td class="url-cell"><a [href]="code.url" target="_blank" rel="noopener" (click)="$event.stopPropagation()">{{ code.url }}</a></td>
                     <td class="date-cell">{{ code.creadoEn | date:'dd/MM/yyyy HH:mm' }}</td>
+                    <td class="qr-toggle">{{ expandedPendingId === code.id ? '▲' : '▼' }}</td>
                   </tr>
+                  @if (expandedPendingId === code.id) {
+                    <tr class="qr-expand-row">
+                      <td colspan="4">
+                        <div class="qr-expand-content">
+                          <img [src]="code.qrCode" [alt]="'QR ' + (i+1)" class="qr-expand-img">
+                          <div class="qr-expand-info">
+                            <p class="qr-expand-label">Código QR #{{ i + 1 }}</p>
+                            <a [href]="code.url" target="_blank" rel="noopener" class="qr-expand-url">{{ code.url }}</a>
+                            <a [href]="code.qrCode" [download]="'pendiente-' + (i+1) + '.png'" class="qr-expand-dl">Descargar QR</a>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  }
                 }
               </tbody>
             </table>
@@ -233,6 +249,17 @@ interface PendingCode {
     .date-cell { white-space:nowrap; color:#64748b; font-size:.82rem; }
     .empty-pending { text-align:center; padding:1.5rem 0; }
     .pending-count { margin:.75rem 0 0; font-size:.8rem; color:#64748b; text-align:right; }
+    .pending-row { cursor:pointer; }
+    .th-qr { width:3rem; text-align:center; }
+    .qr-toggle { text-align:center; color:#94a3b8; font-size:.75rem; }
+    .qr-expand-row td { padding:0; background:#f8fafc; border-bottom:1px solid #e2e8f0; }
+    .qr-expand-row:hover td { background:#f8fafc; }
+    .qr-expand-content { display:flex; align-items:center; gap:1.25rem; padding:.75rem 1rem; }
+    .qr-expand-img { width:140px; height:140px; border:1px solid #e2e8f0; border-radius:8px; flex-shrink:0; }
+    .qr-expand-info { display:flex; flex-direction:column; gap:.5rem; min-width:0; }
+    .qr-expand-label { font-weight:700; font-size:.9rem; color:#334155; margin:0; }
+    .qr-expand-url { color:#185adb; font-size:.78rem; overflow-wrap:anywhere; }
+    .qr-expand-dl { font-weight:700; font-size:.82rem; color:#185adb; }
     @media(max-width:860px) { .generator-form { grid-template-columns:1fr 1fr; } }
     @media(max-width:640px) { .generator-form { grid-template-columns:1fr; } }
   `],
@@ -251,6 +278,7 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
   invitations: Invitation[] = [];
   pendingCodes: PendingCode[] = [];
   loadingPending = false;
+  expandedPendingId: string | null = null;
   loading = true;
   busy = false;
   error = '';
@@ -368,6 +396,7 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
     this.invitations = [];
     this.cupos = [];
     this.pendingCodes = [];
+    this.expandedPendingId = null;
     this.stopWatchingSurvey?.();
     this.stopWatchingSurvey = undefined;
     if (this.surveyId) {
@@ -380,6 +409,7 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
 
   async onRespondentGroupChange(): Promise<void> {
     this.pendingCodes = [];
+    this.expandedPendingId = null;
     if (this.surveyId && this.respondentGroup) await this.loadPendingCodes();
     this.cdr.markForCheck();
   }
