@@ -432,7 +432,7 @@ app.get('/api/surveys/:surveyId/cupos', authenticate, asyncRoute(async (req, res
   return res.json(result.rows.map((r) => ({
     grupoEncuestado: r.grupo_encuestado,
     cupo: Number(r.cupo),
-    cupoGenerados: Number(r.cupo_generados),
+    cupoCompletados: Number(r.cupo_completados),
     cupoDisponible: Number(r.cupo_disponible),
   })));
 }));
@@ -456,7 +456,7 @@ app.put('/api/surveys/:surveyId/cupos/:grupo', authenticate, allowRoles('superus
   return res.json(result.rows.map((r) => ({
     grupoEncuestado: r.grupo_encuestado,
     cupo: Number(r.cupo),
-    cupoGenerados: Number(r.cupo_generados),
+    cupoCompletados: Number(r.cupo_completados),
     cupoDisponible: Number(r.cupo_disponible),
   })));
 }));

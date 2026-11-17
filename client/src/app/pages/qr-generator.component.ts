@@ -17,7 +17,7 @@ interface Invitation {
 interface CupoGrupo {
   grupoEncuestado: string;
   cupo: number;
-  cupoGenerados: number;
+  cupoCompletados: number;
   cupoDisponible: number;
 }
 
@@ -53,7 +53,7 @@ interface CupoGrupo {
             <p class="muted cupo-hint">Define el límite de QR para cada tipo. Los cambios aplican de inmediato.</p>
             <div class="cupo-table-wrap">
               <table class="cupo-table">
-                <thead><tr><th>Tipo</th><th>Cupo asignado</th><th>Generados</th><th>Disponibles</th><th></th></tr></thead>
+                <thead><tr><th>Tipo</th><th>Cupo asignado</th><th>Completados</th><th>Disponibles</th><th></th></tr></thead>
                 <tbody>
                   @for (rg of respondentGroups; track rg.value) {
                     <tr>
@@ -63,7 +63,7 @@ interface CupoGrupo {
                           [(ngModel)]="cupoEdits[rg.value]"
                           [placeholder]="getCupoPlaceholder(rg.value)">
                       </td>
-                      <td class="num">{{ getCupoGrupo(rg.value)?.cupoGenerados ?? '—' }}</td>
+                      <td class="num">{{ getCupoGrupo(rg.value)?.cupoCompletados ?? '—' }}</td>
                       <td class="num" [class.agotado]="getCupoGrupo(rg.value)?.cupoDisponible === 0">
                         {{ getCupoGrupo(rg.value)?.cupoDisponible ?? '—' }}
                       </td>
