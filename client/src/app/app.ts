@@ -94,7 +94,7 @@ export class App implements OnInit {
   private async loadGroups(): Promise<void> {
     this.groupsError = '';
     try {
-      this.groups = await firstValueFrom(this.http.get<Group[]>('/api/grupos'));
+      this.groups = await firstValueFrom(this.http.get<Group[]>('/api/grupos/con-encuesta-activa'));
     } catch {
       this.groupsError = 'No se cargaron los grupos.';
     } finally {
