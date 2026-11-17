@@ -77,7 +77,13 @@ interface ManagedUser {
     tbody tr:hover td { background:#f8faff; }
     .error { color:#b42318; grid-column:1/-1; }
     .success { color:#166534; grid-column:1/-1; }
-    @media(max-width:650px) { form { grid-template-columns:1fr; } }
+    @media(max-width:650px) {
+      form { grid-template-columns:1fr; }
+      .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+      table { min-width:480px; }
+      .panel { padding:.875rem .75rem; }
+      h1 { font-size:1.4rem; }
+    }
   `],
 })
 export class UsersComponent implements OnInit {

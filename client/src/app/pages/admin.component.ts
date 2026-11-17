@@ -118,6 +118,16 @@ interface Grupo {
 
     /* ── Delete modal icon ── */
     .delete-icon { display:grid; place-items:center; width:3.5rem; height:3.5rem; border-radius:14px; background:#fef2f2; margin:0 auto 1rem; }
+
+    @media(max-width:640px) {
+      .page-head { flex-direction:column; align-items:flex-start; gap:.75rem; }
+      .page-head app-button, .page-head button { width:100%; }
+      .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+      table { min-width:520px; }
+      .panel { padding:.875rem .75rem; }
+      h1 { font-size:1.4rem; }
+      .modal-card { padding:1.25rem; }
+    }
   `],
   template: `
     <header class="page-head">

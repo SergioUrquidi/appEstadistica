@@ -185,7 +185,16 @@ import { ButtonComponent } from '../shared/button.component';
     .status-badge.status-activo { background:#dcfce7; color:#166534; }
     .status-badge.status-cerrado { background:#f1f5f9; color:#94a3b8; }
 
-    @media(max-width:640px) { .study-form { grid-template-columns:1fr; } .study-form .wide { grid-column:1; } }
+    @media(max-width:640px) {
+      .study-form { grid-template-columns:1fr; }
+      .study-form .wide { grid-column:1; }
+      .page-head { flex-direction:column; align-items:flex-start; gap:.75rem; }
+      .page-head app-button { width:100%; }
+      .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+      table { min-width:520px; }
+      .panel { padding:.875rem .75rem; }
+      h1 { font-size:1.4rem; }
+    }
   `],
 })
 export class EstudiosComponent implements OnInit {

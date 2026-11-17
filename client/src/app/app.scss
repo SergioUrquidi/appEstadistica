@@ -2,6 +2,7 @@ $sidebar-w: 230px;
 $sidebar-bg: #0f172a;
 $sidebar-border: #1e2d3d;
 $accent: #185adb;
+$topbar-h: 56px;
 
 :host {
   display: flex;
@@ -10,6 +11,95 @@ $accent: #185adb;
   min-height: 100vh;
   color: #172033;
   background: #f1f5f9;
+}
+
+/* ── Top bar (mobile only, hidden on desktop) ───────────────── */
+.topbar {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: $topbar-h;
+  background: $sidebar-bg;
+  align-items: center;
+  gap: .75rem;
+  padding: 0 1rem;
+  z-index: 30;
+  border-bottom: 1px solid $sidebar-border;
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 800;
+  font-size: .95rem;
+  flex: 1;
+}
+
+.topbar-avatar {
+  display: grid;
+  place-items: center;
+  min-width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: $accent;
+  color: #fff;
+  font-size: .78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.topbar-menu {
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* Hamburger icon */
+.ham {
+  display: block;
+  position: relative;
+  width: 20px;
+  height: 2px;
+  background: #fff;
+  border-radius: 2px;
+  transition: background .2s;
+
+  &::before, &::after {
+    content: '';
+    display: block;
+    position: absolute;
+    left: 0;
+    width: 20px;
+    height: 2px;
+    background: #fff;
+    border-radius: 2px;
+    transition: transform .2s, top .2s;
+  }
+  &::before { top: -6px; }
+  &::after  { top:  6px; }
+
+  &.ham--open {
+    background: transparent;
+    &::before { top: 0; transform: rotate(45deg); }
+    &::after  { top: 0; transform: rotate(-45deg); }
+  }
+}
+
+/* ── Overlay backdrop ────────────────────────────────────────── */
+.drawer-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 25;
 }
 
 /* ── Sidebar ─────────────────────────────────────────────────── */
@@ -21,7 +111,7 @@ $accent: #185adb;
   flex-direction: column;
   background: $sidebar-bg;
   border-right: 1px solid $sidebar-border;
-  z-index: 20;
+  z-index: 26;
   overflow: hidden;
 }
 
@@ -196,8 +286,8 @@ footer {
   background: #fff;
 }
 
-/* ── Responsive ─────────────────────────────────────────────── */
-@media (max-width: 768px) {
+/* ── Tablet (768px – 1024px) ─────────────────────────────────── */
+@media (max-width: 1024px) and (min-width: 769px) {
   .sidebar { width: 64px; }
   .brand-text, .nav-label, .user-info { display: none; }
   .app-body:not(.app-body--full) { margin-left: 64px; }
@@ -207,12 +297,45 @@ footer {
     margin-left: .55rem;
     padding-left: 0;
     border-left: 0;
-
     .nav-submenu-link {
       justify-content: center;
       padding: .4rem 0;
     }
-
     .nav-submenu-link span:last-child { display: none; }
+  }
+  main { padding: 1.25rem 1rem 2.5rem; }
+}
+
+/* ── Mobile (≤ 768px) ────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Show top bar */
+  .topbar { display: flex; }
+
+  /* Drawer: hidden off-screen by default */
+  .sidebar {
+    top: 0;
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    width: min(280px, 85vw);
+    padding-top: 0;
+    z-index: 26;
+  }
+
+  /* Drawer open */
+  .sidebar--open {
+    transform: translateX(0);
+  }
+
+  /* Show backdrop when drawer is open */
+  .drawer-backdrop { display: block; }
+
+  /* Content pushed down by top bar */
+  .app-body:not(.app-body--full) {
+    margin-left: 0;
+    padding-top: $topbar-h;
+  }
+
+  main {
+    padding: 1rem .875rem 2.5rem;
   }
 }

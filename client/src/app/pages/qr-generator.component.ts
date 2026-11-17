@@ -261,7 +261,20 @@ interface PendingCode {
     .qr-expand-url { color:#185adb; font-size:.78rem; overflow-wrap:anywhere; }
     .qr-expand-dl { font-weight:700; font-size:.82rem; color:#185adb; }
     @media(max-width:860px) { .generator-form { grid-template-columns:1fr 1fr; } }
-    @media(max-width:640px) { .generator-form { grid-template-columns:1fr; } }
+    @media(max-width:640px) {
+      .generator-form { grid-template-columns:1fr; }
+      .submit-wrap { flex-direction:row; align-items:center; }
+      .cupo-editor { padding-bottom:1rem; }
+      .cupo-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+      .cupo-table { min-width:400px; }
+      .panel { padding:.875rem .75rem; }
+      h1 { font-size:1.4rem; }
+      .invitation-list { grid-template-columns:1fr; }
+      .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+      table { min-width:420px; }
+      .pending-head { flex-wrap:wrap; }
+      .qr-expand-img { width:120px; height:120px; }
+    }
   `],
 })
 export class QrGeneratorComponent implements OnInit, OnDestroy {

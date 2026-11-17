@@ -128,6 +128,9 @@ interface PublicSurvey {
     .score { margin:.3rem 0; color:#185adb; font-size:2rem; font-weight:800; }
     .result-question { display:grid; gap:.35rem; margin-top:.8rem; padding:.75rem; border-radius:9px; background:#f8fafc; }
     .result-question small,.muted { color:#64748b; }
+    @media(max-width:640px) {
+      .response-card { margin:0; border-radius:0; border-left:0; border-right:0; min-height:100vh; }
+    }
   `],
 })
 export class RespondComponent implements OnInit {
