@@ -87,10 +87,12 @@ export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'quiet' | 'tab'
     .button--secondary {
       color: var(--color-action-text);
       background: var(--color-action-soft);
+      border-color: #a8d9c8;
     }
 
     .button--secondary:hover:not(:disabled) {
       background: var(--color-action-soft-hover);
+      border-color: var(--color-action-hover);
     }
 
     .button--danger {
@@ -105,10 +107,12 @@ export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'quiet' | 'tab'
     .button--quiet {
       color: var(--color-quiet-text);
       background: var(--color-quiet-bg);
+      border-color: #c8ddd8;
     }
 
     .button--quiet:hover:not(:disabled) {
       background: var(--color-quiet-bg-hover);
+      border-color: #a8c8c0;
     }
 
     .button--tab,

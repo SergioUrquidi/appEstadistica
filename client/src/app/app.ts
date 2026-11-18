@@ -1,7 +1,7 @@
 import { ChangeDetectorRef, Component, effect, OnInit } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import { filter, firstValueFrom } from 'rxjs';
 import { AuthService } from './core/auth.service';
 import { Group } from './core/models';
 import { ButtonComponent } from './shared/button.component';
@@ -114,6 +114,12 @@ export class App implements OnInit {
       if (this.groupsUserId === user.id) return;
       this.groupsUserId = user.id;
       void this.loadGroups();
+    });
+
+    this.router.events.pipe(
+      filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+    ).subscribe(() => {
+      if (this.auth.user()) void this.loadGroups();
     });
   }
 

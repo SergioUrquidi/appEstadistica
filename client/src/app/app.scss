@@ -1,6 +1,6 @@
 $sidebar-w: 230px;
-$sidebar-bg: #0f172a;
-$sidebar-border: #1e2d3d;
+$sidebar-bg: #0d2b24;
+$sidebar-border: #183d30;
 $accent: #8dcab8;
 $topbar-h: 56px;
 
@@ -10,7 +10,7 @@ $topbar-h: 56px;
   min-width: 0;
   min-height: 100vh;
   color: #172033;
-  background: #f1f5f9;
+  background: #f4f8f6;
 }
 
 /* ── Top bar (mobile only, hidden on desktop) ───────────────── */
@@ -45,7 +45,7 @@ $topbar-h: 56px;
   height: 2rem;
   border-radius: 50%;
   background: $accent;
-  color: #fff;
+  color: #0d2b24;
   font-size: .78rem;
   font-weight: 800;
   text-transform: uppercase;
@@ -133,7 +133,7 @@ $topbar-h: 56px;
   min-width: 2.3rem;
   height: 2.3rem;
   border-radius: 9px;
-  color: #fff;
+  color: #0d2b24;
   background: $accent;
   font-size: 1.25rem;
 }
@@ -142,7 +142,7 @@ $topbar-h: 56px;
   display: flex;
   flex-direction: column;
   line-height: 1.25;
-  small { color: #64748b; font-size: .64rem; font-weight: 500; }
+  small { color: #5a8a7e; font-size: .64rem; font-weight: 500; }
 }
 
 /* ── Navigation ─────────────────────────────────────────────── */
@@ -158,17 +158,17 @@ $topbar-h: 56px;
     padding: .68rem 1rem;
     margin: .1rem .5rem;
     border-radius: 8px;
-    color: #94a3b8;
+    color: #8abfb5;
     text-decoration: none;
     font-size: .875rem;
     font-weight: 600;
     transition: color .15s, background .15s;
     cursor: pointer;
 
-    &:hover { color: #e2e8f0; background: #1e293b; }
+    &:hover { color: #c8ece4; background: #183d30; }
 
     &.active-link {
-      color: #fff;
+      color: #0d2b24;
       background: $accent;
       .nav-icon { opacity: 1; }
     }
@@ -231,7 +231,7 @@ $topbar-h: 56px;
   height: 2rem;
   border-radius: 50%;
   background: $accent;
-  color: #fff;
+  color: #0d2b24;
   font-size: .78rem;
   font-weight: 800;
   text-transform: uppercase;
@@ -242,13 +242,13 @@ $topbar-h: 56px;
   min-width: 0;
   strong {
     display: block;
-    color: #e2e8f0;
+    color: #c8ece4;
     font-size: .78rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  small { color: #475569; font-size: .68rem; }
+  small { color: #5a8a7e; font-size: .68rem; }
 }
 
 .logout-btn { margin-left: auto; }
@@ -274,8 +274,8 @@ $topbar-h: 56px;
   align-items: center;
   gap: 1.25rem;
   padding: .75rem 1.5rem;
-  background: #0f172a;
-  border-bottom: 1px solid #1e2d3d;
+  background: #0d2b24;
+  border-bottom: 1px solid #183d30;
 }
 
 .topbar-public .topbar-brand {

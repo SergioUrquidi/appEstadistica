@@ -96,7 +96,7 @@ interface PendingCode {
             </select>
           </label>
           @if (isSuperuser) {
-            <label>Cantidad
+            <label class="label-count">Cantidad
               <input name="count" type="number" min="1" max="100" step="1" [(ngModel)]="count" required>
             </label>
           }
@@ -201,10 +201,12 @@ interface PendingCode {
     .grupo-name { font-weight:600; }
     .num { text-align:center; font-variant-numeric:tabular-nums; }
     .num.agotado { color:#dc2626; font-weight:700; }
-    .generator-form { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) 130px auto; gap:.8rem; align-items:end; margin-top:1rem; }
+    .generator-form { display:flex; flex-wrap:wrap; gap:.8rem; align-items:end; margin-top:1rem; }
+    .generator-form > label { flex:1 1 180px; min-width:0; }
     label { display:grid; gap:.4rem; color:#334155; font-size:.86rem; font-weight:700; }
+    .label-count { flex:0 0 130px; }
     input,select { width:100%; padding:.7rem; border:1px solid #cbd5e1; border-radius:8px; font:inherit; }
-    .submit-wrap { display:flex; flex-direction:column; gap:.4rem; align-items:flex-start; }
+    .submit-wrap { display:flex; flex-direction:column; gap:.4rem; align-items:flex-start; flex-shrink:0; }
     .cupo-warning { font-size:.78rem; font-weight:700; color:#dc2626; }
     .cupo-badge { font-size:.78rem; font-weight:700; color:#059669; }
     .error { color:#b42318; }
@@ -245,9 +247,8 @@ interface PendingCode {
     .qr-expand-label { font-weight:700; font-size:.9rem; color:#334155; margin:0; }
     .qr-expand-url { color:#8dcab8; font-size:.78rem; overflow-wrap:anywhere; }
     .qr-expand-dl { font-weight:700; font-size:.82rem; color:#8dcab8; }
-    @media(max-width:860px) { .generator-form { grid-template-columns:1fr 1fr; } }
     @media(max-width:640px) {
-      .generator-form { grid-template-columns:1fr; }
+      .generator-form > label, .label-count { flex-basis:100%; }
       .submit-wrap { flex-direction:row; align-items:center; }
       .cupo-info { padding-bottom:1rem; }
       .cupo-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
