@@ -210,7 +210,7 @@ app.get('/api/me', authenticate, asyncRoute(async (req, res) => {
 
 app.get('/api/users', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
   const result = await pool.query(
-    'SELECT * FROM estadistica.fn_listar_usuarios($1)',
+    'SELECT * FROM estadistica.fn_listar_usuarios($1::boolean, FALSE)',
     [req.user.role === 'superuser'],
   );
   return res.json(result.rows);
@@ -338,15 +338,7 @@ app.get('/api/respondent-groups', authenticate, asyncRoute(async (_req, res) => 
 app.get('/api/respondent-groups/con-encuesta-activa', authenticate, asyncRoute(async (_req, res) => {
   // Solo tipos de encuestado que tienen encuesta en feria activa
   const result = await pool.query(
-    `SELECT DISTINCT ge.value, ge.label
-     FROM estadistica.fn_grupos_encuestados_con_encuesta_activa() ge
-     WHERE EXISTS (
-       SELECT 1 FROM estadistica.encuestas es
-       JOIN estadistica.estudios et ON et.id = es.estudio_id
-       WHERE et.estado = 'activo'
-         AND es.estado = 'activa'
-         AND es.grupo_encuestado = ge.value
-     )`,
+    `SELECT value, label FROM estadistica.fn_grupos_encuestados_con_encuesta_activa()`,
   );
   return res.json(result.rows);
 }));
@@ -948,6 +940,31 @@ app.get('/api/grupos/con-encuesta-activa', authenticate, asyncRoute(async (req, 
   return res.json(grupoIds ? result.rows.filter((r) => grupoIds.has(r.id)) : result.rows);
 }));
 
+// Admin — mapa de asignaciones de todos los encuestadores
+app.get('/api/admin/asignaciones-encuestadores', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (_req, res) => {
+  const result = await pool.query(`
+    SELECT
+      a.id            AS asignacion_id,
+      a.usuario_id,
+      a.encuesta_id   AS survey_id,
+      e.titulo        AS survey_titulo,
+      a.grupo_encuestado
+    FROM estadistica.asignaciones_encuestador a
+    JOIN estadistica.encuestas e ON e.id = a.encuesta_id
+  `);
+  return res.json(result.rows);
+}));
+
+// Admin — todas las encuestas sin filtro de estado
+app.get('/api/admin/encuestas', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (_req, res) => {
+  const result = await pool.query(`
+    SELECT e.id, e.titulo, e.estado
+    FROM estadistica.encuestas e
+    ORDER BY e.titulo
+  `);
+  return res.json(result.rows);
+}));
+
 // Admin CRUD — grupos
 app.get('/api/admin/grupos', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (_req, res) => {
   const result = await pool.query('SELECT * FROM estadistica.fn_listar_grupos_admin()');
@@ -994,6 +1011,23 @@ app.delete('/api/admin/grupos/:id', authenticate, allowRoles('admin', 'superuser
   const row = r.rows[0];
   if (row.p_error) return res.status(400).json({ error: row.p_error });
   return res.json({ ok: true });
+}));
+
+// Admin — tipos de pregunta
+app.get('/api/admin/tipos-pregunta', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (_req, res) => {
+  const result = await pool.query('SELECT codigo, etiqueta, es_numerica, permite_multiple, orden, activo FROM estadistica.tipos_pregunta ORDER BY orden');
+  return res.json(result.rows);
+}));
+
+app.patch('/api/admin/tipos-pregunta/:codigo', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
+  const { activo } = validate(z.object({ activo: z.boolean() }), req.body);
+  const { codigo } = req.params;
+  const result = await pool.query(
+    'UPDATE estadistica.tipos_pregunta SET activo = $1 WHERE codigo = $2 RETURNING codigo, etiqueta, activo',
+    [activo, codigo],
+  );
+  if (!result.rows.length) return res.status(404).json({ error: 'Tipo no encontrado' });
+  return res.json(result.rows[0]);
 }));
 
 app.post('/api/estudios', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
@@ -1171,7 +1205,10 @@ server.listen(port, () => {
   console.log(`API de estadística escuchando en el puerto ${port}.`);
 });
 
+let shuttingDown = false;
 async function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
   await pool.end();
   server.close(() => process.exit(0));
 }

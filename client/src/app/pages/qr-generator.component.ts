@@ -2,8 +2,8 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
-import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom, Subscription } from 'rxjs';
+import { QrService } from '../core/qr.service';
 import { Group, RespondentGroup, Survey } from '../core/models';
 import { ButtonComponent } from '../shared/button.component';
 import { AuthService } from '../core/auth.service';
@@ -90,16 +90,14 @@ interface PendingCode {
           <label>Tipo de encuestado
             <select name="respondentGroup" [(ngModel)]="respondentGroup" (ngModelChange)="onRespondentGroupChange()" required>
               <option value="" disabled>Selecciona el tipo</option>
-              @for (group of respondentGroups; track group.value) {
+              @for (group of respondentGroupsFiltrados; track group.value) {
                 <option [value]="group.value">{{ group.label | titlecase }}</option>
               }
             </select>
           </label>
-          @if (isSuperuser) {
-            <label class="label-count">Cantidad
-              <input name="count" type="number" min="1" max="100" step="1" [(ngModel)]="count" required>
-            </label>
-          }
+          <label class="label-count hidden-field">Cantidad
+            <input name="count" type="number" min="1" max="100" step="1" [(ngModel)]="count" required>
+          </label>
           <div class="submit-wrap">
             <app-button type="submit" [disabled]="busy || !canGenerate">
               {{ busy ? 'Generando…' : 'Generar QR' }}
@@ -204,7 +202,7 @@ interface PendingCode {
     .generator-form { display:flex; flex-wrap:wrap; gap:.8rem; align-items:end; margin-top:1rem; }
     .generator-form > label { flex:1 1 180px; min-width:0; }
     label { display:grid; gap:.4rem; color:#334155; font-size:.86rem; font-weight:700; }
-    .label-count { flex:0 0 130px; }
+    .hidden-field { display:none; }
     input,select { width:100%; padding:.7rem; border:1px solid #cbd5e1; border-radius:8px; font:inherit; }
     .submit-wrap { display:flex; flex-direction:column; gap:.4rem; align-items:flex-start; flex-shrink:0; }
     .cupo-warning { font-size:.78rem; font-weight:700; color:#dc2626; }
@@ -248,7 +246,7 @@ interface PendingCode {
     .qr-expand-url { color:#8dcab8; font-size:.78rem; overflow-wrap:anywhere; }
     .qr-expand-dl { font-weight:700; font-size:.82rem; color:#8dcab8; }
     @media(max-width:640px) {
-      .generator-form > label, .label-count { flex-basis:100%; }
+      .generator-form > label { flex-basis:100%; }
       .submit-wrap { flex-direction:row; align-items:center; }
       .cupo-info { padding-bottom:1rem; }
       .cupo-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
@@ -287,7 +285,7 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
 
   constructor(
     private readonly route: ActivatedRoute,
-    private readonly http: HttpClient,
+    private readonly qrService: QrService,
     readonly cdr: ChangeDetectorRef,
     readonly auth: AuthService,
     private readonly socket: SocketService,
@@ -302,6 +300,12 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
     return role === 'superuser' || role === 'admin';
   }
 
+  get respondentGroupsFiltrados(): RespondentGroup[] {
+    if (!this.cupos.length) return this.respondentGroups;
+    const conCupo = new Set(this.cupos.map((c) => c.grupoEncuestado));
+    return this.respondentGroups.filter((g) => conCupo.has(g.value));
+  }
+
   get selectedGroup(): Group | undefined {
     return this.groups.find((group) => group.id === this.selectedGroupId);
   }
@@ -312,7 +316,6 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
 
   get canGenerate(): boolean {
     if (!this.surveyId || !this.respondentGroup) return false;
-    if (this.isSuperuser && (this.count === null || this.count < 1)) return false;
     if (this.selectedCupo?.cupoDisponible === 0) return false;
     return true;
   }
@@ -329,8 +332,8 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
 
     try {
       [this.groups, this.respondentGroups] = await Promise.all([
-        firstValueFrom(this.http.get<Group[]>('/api/grupos/con-encuesta-activa')),
-        firstValueFrom(this.http.get<RespondentGroup[]>('/api/respondent-groups/con-encuesta-activa')),
+        firstValueFrom(this.qrService.getGruposConEncuestaActiva()),
+        firstValueFrom(this.qrService.getRespondentGroupsConEncuestaActiva()),
       ]);
       this.groupsLoaded = true;
       await this.loadSurveys(this.route.snapshot.paramMap.get('groupId'));
@@ -372,8 +375,7 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
     this.pendingCodes = [];
     const requestId = ++this.surveyRequest;
     try {
-      const params = new HttpParams().set('groupId', group.id);
-      const surveys = await firstValueFrom(this.http.get<Survey[]>('/api/surveys', { params }));
+      const surveys = await firstValueFrom(this.qrService.getSurveysByGroup(group.id));
       if (requestId !== this.surveyRequest) return;
       this.surveys = surveys.filter((survey) => survey.status === 'active');
       this.surveyId = this.surveys[0]?.id ?? '';
@@ -422,9 +424,8 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
     this.loadingPending = true;
     this.cdr.markForCheck();
     try {
-      const params = new HttpParams().set('grupo', this.respondentGroup);
       this.pendingCodes = await firstValueFrom(
-        this.http.get<PendingCode[]>(`/api/surveys/${this.surveyId}/codes/pending`, { params }),
+        this.qrService.getPendingCodes(this.surveyId, this.respondentGroup),
       );
     } catch {
       this.pendingCodes = [];
@@ -445,7 +446,7 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
 
   private async loadCupos(): Promise<void> {
     try {
-      this.cupos = await firstValueFrom(this.http.get<CupoGrupo[]>(`/api/surveys/${this.surveyId}/cupos`));
+      this.cupos = await firstValueFrom(this.qrService.getCupos(this.surveyId));
     } catch {
       this.cupos = [];
     }
@@ -456,15 +457,13 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
     this.busy = true;
     this.error = '';
     this.invitations = [];
-    const count = this.isSuperuser ? (this.count ?? 1) : 1;
+    const count = this.count ?? 1;
     try {
-      const result = await firstValueFrom(this.http.post<{ invitations: Invitation[] }>(
-        `/api/surveys/${this.surveyId}/codes`,
-        {
-          surveyGroupId: this.selectedGroupId,
-          respondentGroup: this.respondentGroup,
-          count,
-        },
+      const result = await firstValueFrom(this.qrService.generateInvitations(
+        this.surveyId,
+        this.selectedGroupId,
+        this.respondentGroup,
+        count,
       ));
       this.invitations = result.invitations;
       await this.loadCupos();

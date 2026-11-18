@@ -18,6 +18,7 @@ interface ManagedUser {
 interface Estudio {
   id: string;
   titulo: string;
+  status: string;
 }
 
 interface ActiveSurvey {
@@ -77,12 +78,16 @@ const PAGE_SIZE = 10;
           </label>
           @if (role === 'encuestador') {
             <label>Feria
-              <select name="feriaId" [(ngModel)]="feriaId" (ngModelChange)="onFeriaChange()" required>
-                <option value="">— Selecciona una feria —</option>
-                @for (e of estudios; track e.id) {
-                  <option [value]="e.id">{{ e.titulo }}</option>
-                }
-              </select>
+              @if (estudios.length === 1) {
+                <div class="feria-unica">{{ estudios[0].titulo }}</div>
+              } @else {
+                <select name="feriaId" [(ngModel)]="feriaId" (ngModelChange)="onFeriaChange()" required>
+                  <option value="">— Selecciona una feria —</option>
+                  @for (e of estudios; track e.id) {
+                    <option [value]="e.id">{{ e.titulo }}</option>
+                  }
+                </select>
+              }
               @if (loadingEstudios) { <span class="hint">Cargando…</span> }
             </label>
             <label>Encuesta asignada
@@ -230,7 +235,9 @@ const PAGE_SIZE = 10;
     .create-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; margin-top:.25rem; }
     label { display:grid; gap:.4rem; color:#334155; font-size:.86rem; font-weight:700; }
     .full-row { grid-column:1/-1; }
-    input,select { width:100%; padding:.7rem; border:1px solid #cbd5e1; border-radius:8px; font:inherit; }
+    input,select { width:100%; padding:.7rem; border:1px solid #cbd5e1; border-radius:8px; font:inherit; color:#334155 !important; background:#ffffff !important; }
+    select option { color:#334155; background:#ffffff; }
+    .feria-unica { width:100%; padding:.7rem; border:1px solid #cbd5e1; border-radius:8px; color:#334155; background:#f8fafc; font-size:inherit; }
     .hint { font-size:.78rem; font-weight:400; color:#64748b; }
     app-button { grid-column:1/-1; justify-self:start; }
     .form-msg { font-size:.85rem; grid-column:1/-1; }
@@ -386,7 +393,7 @@ export class UsersComponent implements OnInit {
     void this.loadSurveysForFeria();
   }
 
-  onSearch(): void {
+onSearch(): void {
     this.currentPage = 0;
     this.applyFilter();
   }
@@ -448,7 +455,12 @@ export class UsersComponent implements OnInit {
     this.loadingEstudios = true;
     this.cdr.markForCheck();
     try {
-      this.estudios = await firstValueFrom(this.http.get<Estudio[]>('/api/estudios'));
+      const all = await firstValueFrom(this.http.get<Estudio[]>('/api/estudios'));
+      this.estudios = all.filter((e) => e.status === 'activo');
+      if (this.estudios.length === 1) {
+        this.feriaId = this.estudios[0].id;
+        await this.loadSurveysForFeria();
+      }
     } catch {
       this.estudios = [];
     } finally {

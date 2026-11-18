@@ -28,10 +28,27 @@ interface Asignacion {
   grupo_encuestado: string;
 }
 
+interface AsignacionMapEntry {
+  asignacion_id: string;
+  usuario_id: string;
+  survey_id: string;
+  survey_titulo: string;
+  grupo_encuestado: string;
+}
+
 interface Survey {
   id: string;
   titulo: string;
   estado: string;
+}
+
+interface TipoPregunta {
+  codigo: string;
+  etiqueta: string;
+  es_numerica: boolean;
+  permite_multiple: boolean;
+  orden: number;
+  activo: boolean;
 }
 
 interface RespondentGroup {
@@ -126,6 +143,11 @@ interface RespondentGroup {
     .toggle-row { display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; }
     .toggle-label strong { display:block; font-size:.875rem; color:#1e293b; }
     .toggle-label small { font-size:.75rem; color:#94a3b8; }
+
+    /* ── Tipos de pregunta ── */
+    .toggle-inline { display:flex; align-items:center; gap:.6rem; justify-content:flex-end; }
+    .tipo-code { font-family:monospace; font-size:.78rem; background:#f1f5f9; padding:.15rem .5rem; border-radius:6px; color:#475569; }
+    .tipos-hint { font-size:.78rem; color:#94a3b8; margin:.75rem 0 0; }
 
     /* ── Error form ── */
     .form-error { display:flex; align-items:flex-start; gap:.6rem; padding:.65rem .875rem; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; color:#b42318; font-size:.82rem; }
@@ -255,88 +277,81 @@ interface RespondentGroup {
     @if (activeTab === 'asignaciones') {
       <div class="toolbar">
         <div class="toolbar-meta">
-          <h2>Asignaciones de encuestadores</h2>
-          <small>Asigna encuestadores a encuestas y grupos específicos.</small>
+          <h2>Encuestadores y asignaciones</h2>
+          <small>Lista de encuestadores con su encuesta y tipo de encuestado asignado. Edita directamente desde la fila.</small>
         </div>
       </div>
 
-      <div class="panel" style="margin-bottom:1rem">
-        <div class="form-group" style="max-width:420px">
-          <label class="form-label">Selecciona una encuesta</label>
-          <select class="form-input" [(ngModel)]="selectedSurveyId" (ngModelChange)="onSurveyChange()">
-            <option value="">— Elige una encuesta —</option>
-            @for (s of surveys; track s.id) {
-              <option [value]="s.id">{{ s.titulo }} ({{ s.estado }})</option>
+      @if (asignError) { <div class="error-banner" role="alert">{{ asignError }}</div> }
+
+      <div class="panel" style="margin-bottom:.75rem;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+        <input class="form-input" style="flex:1;min-width:200px;max-width:320px" type="text"
+          placeholder="Buscar por nombre o correo…"
+          [(ngModel)]="encuestadorSearch" (ngModelChange)="onEncuestadorSearch()" />
+        <span style="font-size:.82rem;color:#64748b">{{ encuestadoresFiltrados.length }} encuestador{{ encuestadoresFiltrados.length !== 1 ? 'es' : '' }}</span>
+      </div>
+
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Correo</th>
+              <th>Encuesta asignada</th>
+              <th>Tipo encuestado</th>
+              <th style="text-align:right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (encuestadoresPagina.length === 0) {
+              <tr class="empty-row"><td colspan="5">No hay encuestadores registrados.</td></tr>
             }
-          </select>
-        </div>
+            @for (e of encuestadoresPagina; track e.id) {
+              <tr>
+                <td><strong>{{ e.nombre_display }}</strong></td>
+                <td>{{ e.email }}</td>
+                @if (editEncuestadorId === e.id) {
+                  <td>
+                    <select class="form-input" style="font-size:.82rem;padding:.3rem .5rem" [(ngModel)]="editForm.surveyId" (ngModelChange)="onEditSurveyChange()">
+                      <option value="">— Sin encuesta —</option>
+                      @for (s of surveys; track s.id) {
+                        <option [value]="s.id">{{ s.titulo }}</option>
+                      }
+                    </select>
+                  </td>
+                  <td>
+                    <select class="form-input" style="font-size:.82rem;padding:.3rem .5rem" [(ngModel)]="editForm.grupoEncuestado">
+                      <option value="">— Sin tipo —</option>
+                      @for (g of respondentGroupsParaEdit; track g.nombre) {
+                        <option [value]="g.nombre">{{ g.etiqueta }}</option>
+                      }
+                    </select>
+                  </td>
+                  <td class="actions">
+                    <button class="btn-submit" style="padding:.3rem .75rem;font-size:.78rem" (click)="saveEditAsignacion(e)" [disabled]="asignBusy">
+                      {{ asignBusy ? '…' : 'Guardar' }}
+                    </button>
+                    <button class="btn-cancel" style="padding:.3rem .75rem;font-size:.78rem" (click)="cancelEditAsignacion()">Cancelar</button>
+                  </td>
+                } @else {
+                  <td>{{ asignacionMap[e.id]?.survey_titulo ?? '—' }}</td>
+                  <td>{{ asignacionMap[e.id]?.grupo_encuestado ?? '—' }}</td>
+                  <td class="actions">
+                    <button class="btn-primary" style="padding:.3rem .75rem;font-size:.78rem" (click)="startEditAsignacion(e)">Editar</button>
+                  </td>
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
       </div>
 
-      @if (selectedSurveyId) {
-        <div class="toolbar" style="margin-bottom:.75rem">
-          <h3 style="margin:0;font-size:1rem;font-weight:700;color:#0d2b24">Encuestadores asignados</h3>
-          <button class="btn-primary" (click)="showAsignForm = !showAsignForm">
-            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
-            Nueva asignación
-          </button>
+      @if (encuestadoresFiltrados.length > encuestadoresPageSize) {
+        <div style="display:flex;align-items:center;justify-content:center;gap:.5rem;margin-top:.75rem">
+          <button class="btn-cancel" style="padding:.35rem .85rem" [disabled]="encuestadoresPage === 0" (click)="encuestadoresPage = encuestadoresPage - 1; updatePagina()">← Anterior</button>
+          <span style="font-size:.82rem;color:#64748b">Página {{ encuestadoresPage + 1 }} de {{ encuestadoresPaginas }}</span>
+          <button class="btn-cancel" style="padding:.35rem .85rem" [disabled]="encuestadoresPage >= encuestadoresPaginas - 1" (click)="encuestadoresPage = encuestadoresPage + 1; updatePagina()">Siguiente →</button>
         </div>
-
-        @if (showAsignForm) {
-          <div class="panel" style="margin-bottom:1rem">
-            <div class="form-row" style="align-items:end;gap:.75rem;margin-bottom:.75rem">
-              <div class="form-group">
-                <label class="form-label">Encuestador</label>
-                <select class="form-input" [(ngModel)]="asignForm.usuarioId">
-                  <option value="">— Selecciona —</option>
-                  @for (e of encuestadores; track e.id) {
-                    <option [value]="e.id">{{ e.nombre_display }} ({{ e.email }})</option>
-                  }
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Tipo de encuestado</label>
-                <select class="form-input" [(ngModel)]="asignForm.grupoEncuestado">
-                  <option value="">— Selecciona —</option>
-                  @for (g of respondentGroups; track g.nombre) {
-                    <option [value]="g.nombre">{{ g.etiqueta }}</option>
-                  }
-                </select>
-              </div>
-            </div>
-            @if (asignFormError) { <p class="form-error">{{ asignFormError }}</p> }
-            <div style="display:flex;gap:.5rem">
-              <button class="btn-submit" style="flex:0 0 auto;padding:.5rem 1.25rem" (click)="addAsignacion()" [disabled]="asignBusy || !asignForm.usuarioId || !asignForm.grupoEncuestado">
-                {{ asignBusy ? 'Asignando…' : 'Asignar' }}
-              </button>
-              <button class="btn-cancel" style="flex:0 0 auto;padding:.5rem 1rem" (click)="showAsignForm = false">Cancelar</button>
-            </div>
-          </div>
-        }
-
-        @if (asignError) { <div class="error-banner" role="alert">{{ asignError }}</div> }
-
-        @if (asignLoading) {
-          <div class="loading"><div class="spinner"></div><p>Cargando…</p></div>
-        } @else {
-          <div class="table-card">
-            <table>
-              <thead><tr><th>Encuestador</th><th>Correo</th><th>Tipo de encuestado</th><th style="text-align:right">Acciones</th></tr></thead>
-              <tbody>
-                @if (asignaciones.length === 0) {
-                  <tr class="empty-row"><td colspan="4">Sin asignaciones para esta encuesta.</td></tr>
-                }
-                @for (a of asignaciones; track a.asignacion_id) {
-                  <tr>
-                    <td><strong>{{ a.nombre }}</strong></td>
-                    <td>{{ a.email }}</td>
-                    <td>{{ a.grupo_encuestado }}</td>
-                    <td class="actions"><button class="btn-danger-outline" (click)="removeAsignacion(a.asignacion_id)">Quitar</button></td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        }
       }
     }
 
@@ -438,11 +453,69 @@ interface RespondentGroup {
         </div>
       </div>
     }
+
+    <!-- TAB: Tipos de pregunta -->
+    @if (activeTab === 'tipos') {
+      <div class="toolbar">
+        <div class="toolbar-meta">
+          <h2>Tipos de pregunta</h2>
+          <small>Activa o desactiva los tipos disponibles al crear encuestas.</small>
+        </div>
+      </div>
+
+      @if (tiposError) {
+        <div class="error-banner">{{ tiposError }}</div>
+      }
+      @if (tiposLoading) {
+        <div class="loading"><div class="spinner"></div><p>Cargando tipos…</p></div>
+      } @else {
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>Código</th>
+                <th>Numérica</th>
+                <th>Múltiple</th>
+                <th style="text-align:right">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (t of tiposPregunta; track t.codigo) {
+                <tr>
+                  <td><strong>{{ t.etiqueta }}</strong></td>
+                  <td><span class="tipo-code">{{ t.codigo }}</span></td>
+                  <td>{{ t.es_numerica ? 'Sí' : 'No' }}</td>
+                  <td>{{ t.permite_multiple ? 'Sí' : 'No' }}</td>
+                  <td class="actions">
+                    <div class="toggle-inline">
+                      <span class="badge" [class.badge-active]="t.activo" [class.badge-inactive]="!t.activo">
+                        <span class="badge-dot"></span>{{ t.activo ? 'Activo' : 'Inactivo' }}
+                      </span>
+                      <button class="toggle-track" [class.on]="t.activo"
+                              [disabled]="tiposBusy[t.codigo]"
+                              (click)="toggleTipo(t)">
+                        <span class="toggle-thumb"></span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <p class="tipos-hint">Los tipos inactivos no aparecen como opción al crear preguntas en nuevas encuestas.</p>
+      }
+    }
   `,
 })
 export class AdminComponent implements OnInit {
   activeTab = 'grupos';
-  tabs = [{ id: 'grupos', label: '📋  Grupos' }, { id: 'asignaciones', label: '👤  Encuestadores' }];
+  tabs = [
+    { id: 'grupos', label: '📋  Grupos' },
+    { id: 'asignaciones', label: '👤  Encuestadores' },
+    { id: 'tipos', label: '⚙️  Tipos de pregunta' },
+  ];
 
   grupos: Grupo[] = [];
   loading = true;
@@ -456,17 +529,39 @@ export class AdminComponent implements OnInit {
 
   deleteTarget: Grupo | null = null;
 
-  // ── Asignaciones ─────────────────────────────────────────────────────────
+  // ── Tipos de pregunta ─────────────────────────────────────────────────────
+  tiposPregunta: TipoPregunta[] = [];
+  tiposLoading = false;
+  tiposError = '';
+  tiposBusy: Record<string, boolean> = {};
+
+  // ── Asignaciones / tabla encuestadores ───────────────────────────────────
   encuestadores: Encuestador[] = [];
   surveys: Survey[] = [];
   respondentGroups: RespondentGroup[] = [];
+  asignacionMap: Record<string, AsignacionMapEntry> = {};
+  asignError = '';
+  asignBusy = false;
+
+  // búsqueda y paginación
+  encuestadorSearch = '';
+  encuestadoresFiltrados: Encuestador[] = [];
+  encuestadoresPage = 0;
+  encuestadoresPageSize = 10;
+  encuestadoresPaginas = 1;
+  encuestadoresPagina: Encuestador[] = [];
+
+  // edición inline
+  editEncuestadorId = '';
+  editForm = { surveyId: '', grupoEncuestado: '' };
+  editCupos: string[] = [];
+
+  // legado (mantenidos para no romper métodos que aún los usan)
   selectedSurveyId = '';
   asignaciones: Asignacion[] = [];
   asignLoading = false;
-  asignError = '';
   showAsignForm = false;
   asignForm = { usuarioId: '', grupoEncuestado: '' };
-  asignBusy = false;
   asignFormError = '';
 
   constructor(
@@ -477,10 +572,48 @@ export class AdminComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     await Promise.all([
       this.loadGrupos(),
-      this.loadEncuestadores(),
       this.loadSurveys(),
       this.loadRespondentGroups(),
+      this.loadTipos(),
     ]);
+    await this.loadEncuestadores();
+    await this.loadAsignacionMap();
+  }
+
+  async loadTipos(): Promise<void> {
+    this.tiposLoading = true;
+    this.tiposError = '';
+    try {
+      this.tiposPregunta = await firstValueFrom(this.http.get<TipoPregunta[]>('/api/admin/tipos-pregunta'));
+    } catch {
+      this.tiposError = 'No se pudieron cargar los tipos de pregunta.';
+    } finally {
+      this.tiposLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async toggleTipo(t: TipoPregunta): Promise<void> {
+    this.tiposBusy[t.codigo] = true;
+    this.cdr.markForCheck();
+    try {
+      const updated = await firstValueFrom(
+        this.http.patch<TipoPregunta>(`/api/admin/tipos-pregunta/${t.codigo}`, { activo: !t.activo }),
+      );
+      const idx = this.tiposPregunta.findIndex((x) => x.codigo === updated.codigo);
+      if (idx !== -1) {
+        this.tiposPregunta = [
+          ...this.tiposPregunta.slice(0, idx),
+          { ...this.tiposPregunta[idx], activo: updated.activo },
+          ...this.tiposPregunta.slice(idx + 1),
+        ];
+      }
+    } catch {
+      this.tiposError = 'No se pudo actualizar el tipo.';
+    } finally {
+      this.tiposBusy[t.codigo] = false;
+      this.cdr.markForCheck();
+    }
   }
 
   async loadGrupos(): Promise<void> {
@@ -548,12 +681,15 @@ export class AdminComponent implements OnInit {
   async loadEncuestadores(): Promise<void> {
     try {
       this.encuestadores = await firstValueFrom(this.http.get<Encuestador[]>('/api/encuestadores'));
+      this.encuestadoresFiltrados = [...this.encuestadores];
+      this.encuestadoresPage = 0;
+      this.updatePagina();
     } catch { /* silencioso */ }
   }
 
   async loadSurveys(): Promise<void> {
     try {
-      this.surveys = await firstValueFrom(this.http.get<Survey[]>('/api/surveys'));
+      this.surveys = await firstValueFrom(this.http.get<Survey[]>('/api/admin/encuestas'));
     } catch { /* silencioso */ }
   }
 
@@ -563,51 +699,117 @@ export class AdminComponent implements OnInit {
     } catch { /* silencioso */ }
   }
 
-  async onSurveyChange(): Promise<void> {
-    if (!this.selectedSurveyId) { this.asignaciones = []; return; }
-    this.asignLoading = true;
+  async loadAsignacionMap(): Promise<void> {
+    const map: Record<string, AsignacionMapEntry> = {};
+    try {
+      const rows = await firstValueFrom(
+        this.http.get<AsignacionMapEntry[]>('/api/admin/asignaciones-encuestadores'),
+      );
+      for (const r of rows) {
+        map[r.usuario_id] = r;
+      }
+    } catch { /* silencioso */ }
+    this.asignacionMap = map;
+    this.cdr.markForCheck();
+  }
+
+  onEncuestadorSearch(): void {
+    const q = this.encuestadorSearch.toLowerCase();
+    this.encuestadoresFiltrados = q
+      ? this.encuestadores.filter(
+          (e) =>
+            e.nombre_display.toLowerCase().includes(q) ||
+            e.email.toLowerCase().includes(q),
+        )
+      : [...this.encuestadores];
+    this.encuestadoresPage = 0;
+    this.updatePagina();
+    this.cdr.markForCheck();
+  }
+
+  updatePagina(): void {
+    this.encuestadoresPaginas = Math.max(
+      1,
+      Math.ceil(this.encuestadoresFiltrados.length / this.encuestadoresPageSize),
+    );
+    const start = this.encuestadoresPage * this.encuestadoresPageSize;
+    this.encuestadoresPagina = this.encuestadoresFiltrados.slice(
+      start,
+      start + this.encuestadoresPageSize,
+    );
+    this.cdr.markForCheck();
+  }
+
+  get respondentGroupsParaEdit(): RespondentGroup[] {
+    if (!this.editCupos.length) return this.respondentGroups;
+    return this.respondentGroups.filter((g) => this.editCupos.includes(g.nombre));
+  }
+
+  async onEditSurveyChange(): Promise<void> {
+    this.editForm.grupoEncuestado = '';
+    this.editCupos = [];
+    if (!this.editForm.surveyId) return;
+    try {
+      const cupos = await firstValueFrom(
+        this.http.get<{ grupoEncuestado: string }[]>(`/api/surveys/${this.editForm.surveyId}/cupos`),
+      );
+      this.editCupos = cupos.map((c) => c.grupoEncuestado);
+    } catch { /* silencioso */ }
+    this.cdr.markForCheck();
+  }
+
+  startEditAsignacion(e: Encuestador): void {
+    const entry = this.asignacionMap[e.id];
+    this.editEncuestadorId = e.id;
+    this.editForm = {
+      surveyId: entry?.survey_id ?? '',
+      grupoEncuestado: entry?.grupo_encuestado ?? '',
+    };
+    this.editCupos = [];
+    if (this.editForm.surveyId) void this.onEditSurveyChange();
+    this.asignError = '';
+    this.cdr.markForCheck();
+  }
+
+  cancelEditAsignacion(): void {
+    this.editEncuestadorId = '';
+    this.editForm = { surveyId: '', grupoEncuestado: '' };
+    this.editCupos = [];
+    this.cdr.markForCheck();
+  }
+
+  async saveEditAsignacion(e: Encuestador): Promise<void> {
+    this.asignBusy = true;
     this.asignError = '';
     try {
-      this.asignaciones = await firstValueFrom(
-        this.http.get<Asignacion[]>(`/api/surveys/${this.selectedSurveyId}/asignaciones`),
-      );
-    } catch {
-      this.asignError = 'No se pudieron cargar las asignaciones.';
-    } finally {
-      this.asignLoading = false;
-      this.cdr.markForCheck();
-    }
-  }
+      const existing = this.asignacionMap[e.id];
 
-  async addAsignacion(): Promise<void> {
-    if (!this.asignForm.usuarioId || !this.asignForm.grupoEncuestado) return;
-    this.asignBusy = true;
-    this.asignFormError = '';
-    try {
-      this.asignaciones = await firstValueFrom(
-        this.http.post<Asignacion[]>(`/api/surveys/${this.selectedSurveyId}/asignaciones`, {
-          usuarioId: this.asignForm.usuarioId,
-          grupoEncuestado: this.asignForm.grupoEncuestado,
-        }),
-      );
-      this.asignForm = { usuarioId: '', grupoEncuestado: '' };
-      this.showAsignForm = false;
+      // Si tenía asignación previa, la quitamos primero
+      if (existing) {
+        await firstValueFrom(
+          this.http.delete(`/api/surveys/${existing.survey_id}/asignaciones/${existing.asignacion_id}`),
+        );
+      }
+
+      // Crear nueva asignación si eligió encuesta y grupo
+      if (this.editForm.surveyId && this.editForm.grupoEncuestado) {
+        await firstValueFrom(
+          this.http.post<Asignacion[]>(`/api/surveys/${this.editForm.surveyId}/asignaciones`, {
+            usuarioId: e.id,
+            grupoEncuestado: this.editForm.grupoEncuestado,
+          }),
+        );
+      }
+
+      // Recargar mapa
+      await this.loadAsignacionMap();
+      this.editEncuestadorId = '';
+      this.editForm = { surveyId: '', grupoEncuestado: '' };
     } catch (err: unknown) {
       const msg = (err as { error?: { error?: string } })?.error?.error;
-      this.asignFormError = msg ?? 'Error al asignar.';
+      this.asignError = msg ?? 'Error al guardar la asignación.';
     } finally {
       this.asignBusy = false;
-      this.cdr.markForCheck();
-    }
-  }
-
-  async removeAsignacion(id: string): Promise<void> {
-    try {
-      await firstValueFrom(this.http.delete(`/api/surveys/${this.selectedSurveyId}/asignaciones/${id}`));
-      this.asignaciones = this.asignaciones.filter((a) => a.asignacion_id !== id);
-      this.cdr.markForCheck();
-    } catch {
-      this.asignError = 'No se pudo eliminar la asignación.';
       this.cdr.markForCheck();
     }
   }
