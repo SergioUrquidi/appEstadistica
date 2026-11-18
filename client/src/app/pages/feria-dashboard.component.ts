@@ -244,19 +244,19 @@ interface DashboardData {
             <!-- ── Cuartiles e IQR ── -->
             <div class="section-title">Cuartiles y Rango Intercuartílico</div>
             <div class="stats-grid">
-              <div class="stat-tile highlight-purple">
+              <div class="stat-tile highlight-gold">
                 <span class="stat-label">Q1 (Percentil 25)</span>
                 <strong>{{ p.q1 | number:'1.4-4' }}</strong>
               </div>
-              <div class="stat-tile highlight-purple">
+              <div class="stat-tile highlight-gold">
                 <span class="stat-label">Q2 = Mediana</span>
                 <strong>{{ p.mediana | number:'1.4-4' }}</strong>
               </div>
-              <div class="stat-tile highlight-purple">
+              <div class="stat-tile highlight-gold">
                 <span class="stat-label">Q3 (Percentil 75)</span>
                 <strong>{{ p.q3 | number:'1.4-4' }}</strong>
               </div>
-              <div class="stat-tile highlight-purple">
+              <div class="stat-tile highlight-gold">
                 <span class="stat-label">IQR = Q3 − Q1</span>
                 <strong>{{ p.iqr | number:'1.4-4' }}</strong>
               </div>
@@ -421,7 +421,7 @@ interface DashboardData {
     .stat-tile.kurt-lepto { border-color:#34d399; background:#ecfdf5; }
     .stat-tile.kurt-plati { border-color:#f87171; background:#fff1f2; }
     .stat-tile.highlight-blue { border-color:var(--color-action); background:var(--color-action-soft); }
-    .stat-tile.highlight-purple { border-color:var(--color-accent); background:#fdf8ed; }
+    .stat-tile.highlight-gold { border-color:var(--color-accent); background:#fdf8ed; }
     .stat-tile.highlight-green { border-color:#86efac; background:#f0fdf4; }
     .stat-label { font-size:.65rem; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
     .stat-tile strong { font-size:1.05rem; color:#0d2b24; font-weight:700; }
