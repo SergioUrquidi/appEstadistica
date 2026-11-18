@@ -55,7 +55,7 @@ export class LoginComponent {
     try {
       await this.auth.login(this.email, this.password);
       const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
-      await this.router.navigateByUrl(returnUrl || '/encuestas');
+      await this.router.navigateByUrl(returnUrl || '/dashboard');
     } catch {
       this.error = 'No se pudo iniciar sesión. Revisa tus credenciales y la conexión.';
     } finally {

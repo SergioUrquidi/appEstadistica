@@ -97,21 +97,36 @@ import { ButtonComponent } from '../shared/button.component';
 
     <div class="study-grid">
       @for (study of studies; track study.id) {
-        <a class="study-card" [routerLink]="['/estudios', study.id]">
-          <div class="study-card-top">
-            <span class="shift-badge" [class.shift-noche]="study.shift === 'noche'">
-              {{ study.shift === 'mañana' ? '☀ Mañana' : '☾ Noche' }}
-            </span>
-            <span class="status-badge" [class.status-activo]="study.status === 'activo'" [class.status-cerrado]="study.status === 'cerrado'">
-              {{ statusLabel(study.status) }}
-            </span>
-          </div>
-          <h3>{{ study.title }}</h3>
-          @if (study.date) { <p class="study-date">{{ study.date | date:'dd/MM/yyyy' }}</p> }
-          <div class="study-meta">
-            <span>{{ study.response_count ?? 0 }} respuestas</span>
-          </div>
-        </a>
+        <div class="study-card-wrap">
+          <a class="study-card" [routerLink]="['/estudios', study.id]">
+            <div class="study-card-top">
+              <span class="shift-badge" [class.shift-noche]="study.shift === 'noche'">
+                {{ study.shift === 'mañana' ? '☀ Mañana' : '☾ Noche' }}
+              </span>
+              <span class="status-badge" [class.status-activo]="study.status === 'activo'" [class.status-cerrado]="study.status === 'cerrado'">
+                {{ statusLabel(study.status) }}
+              </span>
+            </div>
+            <h3>{{ study.title }}</h3>
+            @if (study.date) { <p class="study-date">{{ study.date | date:'dd/MM/yyyy' }}</p> }
+            <div class="study-meta">
+              <span>{{ study.response_count ?? 0 }} respuestas</span>
+            </div>
+          </a>
+          @if (canCreate) {
+            <div class="card-actions">
+              @if (study.status !== 'activo') {
+                <button class="btn-activar" (click)="setStatus(study, 'activo')" [disabled]="togglingId === study.id" title="Activar feria">
+                  {{ togglingId === study.id ? '…' : '▶ Activar' }}
+                </button>
+              } @else {
+                <button class="btn-cerrar" (click)="setStatus(study, 'cerrado')" [disabled]="togglingId === study.id" title="Cerrar feria">
+                  {{ togglingId === study.id ? '…' : '■ Cerrar' }}
+                </button>
+              }
+            </div>
+          }
+        </div>
       }
     </div>
   `,
@@ -165,6 +180,11 @@ import { ButtonComponent } from '../shared/button.component';
     .status-badge.status-activo { background:#dcfce7; color:#166534; }
     .status-badge.status-cerrado { background:#f1f5f9; color:#94a3b8; }
 
+    .study-card-wrap { position:relative; display:flex; flex-direction:column; }
+    .card-actions { display:flex; justify-content:flex-end; padding:.5rem .25rem 0; gap:.5rem; }
+    .btn-activar { background:#d1fae5; border:1px solid #6ee7b7; border-radius:7px; padding:.3rem .75rem; color:#065f46; font-size:.78rem; font-weight:700; cursor:pointer; &:hover:not(:disabled) { background:#a7f3d0; } &:disabled { opacity:.4; cursor:default; } }
+    .btn-cerrar { background:#fee2e2; border:1px solid #fca5a5; border-radius:7px; padding:.3rem .75rem; color:#991b1b; font-size:.78rem; font-weight:700; cursor:pointer; &:hover:not(:disabled) { background:#fecaca; } &:disabled { opacity:.4; cursor:default; } }
+
     @media(max-width:640px) {
       .study-form { grid-template-columns:1fr; }
       .study-form .wide { grid-column:1; }
@@ -187,6 +207,7 @@ export class EstudiosComponent implements OnInit {
   busy = false;
   showForm = false;
   formError = '';
+  togglingId: string | null = null;
   form = { title: '', description: '', shift: 'mañana', date: '', modeCode: '' };
 
   get groupSummary(): string {
@@ -274,6 +295,24 @@ export class EstudiosComponent implements OnInit {
       this.formError = 'No se pudo crear la feria. Verificá los datos e intentá nuevamente.';
     } finally {
       this.busy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async setStatus(study: Study, status: Study['status']): Promise<void> {
+    this.togglingId = study.id;
+    this.cdr.markForCheck();
+    try {
+      const updated = await firstValueFrom(
+        this.http.patch<Study>(`/api/estudios/${study.id}/status`, { status }),
+      );
+      const idx = this.studies.findIndex((s) => s.id === study.id);
+      if (idx !== -1) this.studies[idx] = updated;
+      this.studies = [...this.studies];
+    } catch {
+      alert('No se pudo cambiar el estado de la feria.');
+    } finally {
+      this.togglingId = null;
       this.cdr.markForCheck();
     }
   }

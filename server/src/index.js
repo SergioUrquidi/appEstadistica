@@ -240,6 +240,42 @@ app.post('/api/users', authenticate, allowRoles('admin', 'superuser'), asyncRout
   }
 }));
 
+app.put('/api/users/:userId', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
+  const input = validate(z.object({
+    displayName: z.string().trim().min(1).max(120),
+    role: z.enum(['superuser', 'admin', 'user', 'encuestador']),
+    password: z.string().min(12).max(200).optional(),
+  }), req.body);
+  if (req.user.role !== 'superuser' && !['user', 'encuestador'].includes(input.role)) {
+    return res.status(403).json({ error: 'Los administradores solo pueden asignar roles de usuario o encuestador.' });
+  }
+  const target = await pool.query(
+    'SELECT id, rol FROM estadistica.usuarios WHERE id = $1',
+    [req.params.userId],
+  );
+  if (!target.rows[0]) return res.status(404).json({ error: 'Usuario no encontrado.' });
+  if (req.user.role !== 'superuser' && target.rows[0].rol === 'superusuario') {
+    return res.status(403).json({ error: 'No puedes modificar a un superusuario.' });
+  }
+  const fields = [
+    'nombre_visible = $1',
+    'rol = $2::estadistica.rol_usuario',
+    'actualizado_por = $3',
+  ];
+  const params = [input.displayName, databaseRoles[input.role], req.user.sub];
+  if (input.password) {
+    fields.push(`hash_contrasena = $${params.length + 1}`);
+    params.push(await bcrypt.hash(input.password, 12));
+  }
+  params.push(req.params.userId);
+  await pool.query(
+    `UPDATE estadistica.usuarios SET ${fields.join(', ')} WHERE id = $${params.length}`,
+    params,
+  );
+  const updated = await pool.query('SELECT * FROM estadistica.vw_usuarios WHERE id = $1', [req.params.userId]);
+  return res.json(updated.rows[0]);
+}));
+
 app.get('/api/surveys', authenticate, asyncRoute(async (req, res) => {
   const groupId = req.query.groupId
     ? validate(z.string().uuid(), req.query.groupId)
@@ -251,18 +287,47 @@ app.get('/api/surveys', authenticate, asyncRoute(async (req, res) => {
     );
     if (!group.rows[0]) return res.status(404).json({ error: 'No se encontró el grupo activo.' });
   }
+  // IDs de encuestas que pertenecen a ferias activas
+  const activaIds = await pool.query(
+    `SELECT es.id FROM estadistica.encuestas es
+     JOIN estadistica.estudios et ON et.id = es.estudio_id
+     WHERE et.estado = 'activo'`,
+  );
+  const activaSet = new Set(activaIds.rows.map((r) => r.id));
+
   if (req.user.role === 'encuestador') {
     const result = await pool.query(
       'SELECT * FROM estadistica.fn_encuestas_asignadas_encuestador($1, $2)',
       [req.user.sub, groupId],
     );
-    return res.json(result.rows);
+    return res.json(result.rows.filter((r) => activaSet.has(r.id)));
   }
   const result = await pool.query(
     'SELECT * FROM estadistica.fn_encuestas_usuario_por_grupo($1, $2, $3)',
     [req.user.sub, ['admin', 'superuser'].includes(req.user.role), groupId],
   );
-  return res.json(result.rows);
+  return res.json(result.rows.filter((r) => activaSet.has(r.id)));
+}));
+
+app.patch('/api/users/:userId/activo', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
+  const input = validate(z.object({ activo: z.boolean() }), req.body);
+  const target = await pool.query(
+    'SELECT id, rol FROM estadistica.usuarios WHERE id = $1',
+    [req.params.userId],
+  );
+  if (!target.rows[0]) return res.status(404).json({ error: 'Usuario no encontrado.' });
+  if (req.user.role !== 'superuser' && target.rows[0].rol === 'superusuario') {
+    return res.status(403).json({ error: 'No puedes modificar a un superusuario.' });
+  }
+  if (req.user.sub === req.params.userId) {
+    return res.status(400).json({ error: 'No puedes darte de baja a ti mismo.' });
+  }
+  await pool.query(
+    'UPDATE estadistica.usuarios SET activo = $1, actualizado_por = $2 WHERE id = $3',
+    [input.activo, req.user.sub, req.params.userId],
+  );
+  const updated = await pool.query('SELECT * FROM estadistica.vw_usuarios WHERE id = $1', [req.params.userId]);
+  return res.json(updated.rows[0]);
 }));
 
 app.get('/api/respondent-groups', authenticate, asyncRoute(async (_req, res) => {
@@ -271,7 +336,18 @@ app.get('/api/respondent-groups', authenticate, asyncRoute(async (_req, res) => 
 }));
 
 app.get('/api/respondent-groups/con-encuesta-activa', authenticate, asyncRoute(async (_req, res) => {
-  const result = await pool.query('SELECT * FROM estadistica.fn_grupos_encuestados_con_encuesta_activa()');
+  // Solo tipos de encuestado que tienen encuesta en feria activa
+  const result = await pool.query(
+    `SELECT DISTINCT ge.value, ge.label
+     FROM estadistica.fn_grupos_encuestados_con_encuesta_activa() ge
+     WHERE EXISTS (
+       SELECT 1 FROM estadistica.encuestas es
+       JOIN estadistica.estudios et ON et.id = es.estudio_id
+       WHERE et.estado = 'activo'
+         AND es.estado = 'activa'
+         AND es.grupo_encuestado = ge.value
+     )`,
+  );
   return res.json(result.rows);
 }));
 
@@ -847,15 +923,29 @@ app.get('/api/grupos', authenticate, asyncRoute(async (_req, res) => {
 }));
 
 app.get('/api/grupos/con-encuesta-activa', authenticate, asyncRoute(async (req, res) => {
+  // IDs de grupos que tienen al menos una encuesta en una feria activa
+  let grupoIds = null;
+  try {
+    const gruposConFeriaActiva = await pool.query(
+      `SELECT DISTINCT g.id FROM estadistica.grupos g
+       JOIN estadistica.encuestas es ON es.grupo_id = g.id
+       JOIN estadistica.estudios et ON et.id = es.estudio_id
+       WHERE et.estado = 'activo' AND es.estado = 'activa'`,
+    );
+    grupoIds = new Set(gruposConFeriaActiva.rows.map((r) => r.id));
+  } catch {
+    // Si el schema difiere, no filtramos (fallback seguro)
+  }
+
   if (req.user.role === 'encuestador') {
     const result = await pool.query(
       'SELECT * FROM estadistica.fn_grupos_activos_encuestador($1)',
       [req.user.sub],
     );
-    return res.json(result.rows);
+    return res.json(grupoIds ? result.rows.filter((r) => grupoIds.has(r.id)) : result.rows);
   }
   const result = await pool.query('SELECT * FROM estadistica.fn_grupos_con_encuesta_activa()');
-  return res.json(result.rows);
+  return res.json(grupoIds ? result.rows.filter((r) => grupoIds.has(r.id)) : result.rows);
 }));
 
 // Admin CRUD — grupos
@@ -963,6 +1053,24 @@ app.post('/api/estudios', authenticate, allowRoles('admin', 'superuser'), asyncR
   return res.status(201).json(studyResult.rows[0]);
 }));
 
+app.patch('/api/estudios/:studyId/status', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
+  const input = validate(z.object({ status: z.enum(['borrador', 'activo', 'cerrado']) }), req.body);
+  const existing = await pool.query(
+    'SELECT id FROM estadistica.vw_estudios_lista WHERE id = $1',
+    [req.params.studyId],
+  );
+  if (!existing.rows[0]) return res.status(404).json({ error: 'Estudio no encontrado.' });
+  await pool.query(
+    "UPDATE estadistica.estudios SET estado = $1 WHERE id = $2",
+    [input.status, req.params.studyId],
+  );
+  const updated = await pool.query(
+    'SELECT * FROM estadistica.vw_estudios_lista WHERE id = $1',
+    [req.params.studyId],
+  );
+  return res.json(updated.rows[0]);
+}));
+
 app.get('/api/estudios/:studyId', authenticate, asyncRoute(async (req, res) => {
   const studyResult = await pool.query(
     'SELECT * FROM estadistica.vw_estudios_lista WHERE id = $1',
@@ -986,8 +1094,10 @@ app.get('/api/estudios/:studyId', authenticate, asyncRoute(async (req, res) => {
 }));
 
 app.get('/api/dashboard/ferias', asyncRoute(async (_req, res) => {
-  const result = await pool.query('SELECT * FROM estadistica.fn_listar_ferias_dashboard()');
-  return res.json(result.rows);
+  const result = await pool.query(
+    "SELECT * FROM estadistica.vw_estudios_lista WHERE status = 'activo' ORDER BY created_at DESC",
+  );
+  return res.json(result.rows.map((r) => ({ id: r.id, titulo: r.title, turno: r.shift, fecha: r.date })));
 }));
 
 app.get('/api/estudios/:studyId/dashboard', asyncRoute(async (req, res) => {
