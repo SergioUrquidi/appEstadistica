@@ -251,13 +251,6 @@ app.get('/api/surveys', authenticate, asyncRoute(async (req, res) => {
     );
     if (!group.rows[0]) return res.status(404).json({ error: 'No se encontró el grupo activo.' });
   }
-  if (req.user.role === 'encuestador') {
-    const result = await pool.query(
-      'SELECT * FROM estadistica.fn_encuestas_asignadas_encuestador($1, $2)',
-      [req.user.sub, groupId],
-    );
-    return res.json(result.rows);
-  }
   const result = await pool.query(
     'SELECT * FROM estadistica.fn_encuestas_usuario_por_grupo($1, $2, $3)',
     [req.user.sub, ['admin', 'superuser'].includes(req.user.role), groupId],
@@ -846,14 +839,7 @@ app.get('/api/grupos', authenticate, asyncRoute(async (_req, res) => {
   return res.json(result.rows);
 }));
 
-app.get('/api/grupos/con-encuesta-activa', authenticate, asyncRoute(async (req, res) => {
-  if (req.user.role === 'encuestador') {
-    const result = await pool.query(
-      'SELECT * FROM estadistica.fn_grupos_activos_encuestador($1)',
-      [req.user.sub],
-    );
-    return res.json(result.rows);
-  }
+app.get('/api/grupos/con-encuesta-activa', authenticate, asyncRoute(async (_req, res) => {
   const result = await pool.query('SELECT * FROM estadistica.fn_grupos_con_encuesta_activa()');
   return res.json(result.rows);
 }));
