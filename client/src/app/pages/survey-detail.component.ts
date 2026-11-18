@@ -200,14 +200,14 @@ interface OptionDraft {
     } @else if (error) { <p class="error" role="alert">{{ error }}</p> } @else { <p>Cargando encuesta…</p> }
   `,
   styles: [`
-    .back-link { color:#185adb; text-decoration:none; font-weight:700; font-size:.88rem; }
+    .back-link { color:#8dcab8; text-decoration:none; font-weight:700; font-size:.88rem; }
     .page-head,.section-title,.save-row { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
     .page-head { margin:1.2rem 0 1.5rem; }
     h1 { margin:.25rem 0; font-size:clamp(1.5rem,4vw,2rem); }
     h2 { margin:.2rem 0 .4rem; font-size:1.2rem; }
     h3 { margin:.2rem 0 1rem; font-size:1.05rem; }
     h4 { margin:1.2rem 0 .65rem; }
-    .eyebrow { color:#185adb; font-size:.75rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+    .eyebrow { color:#8dcab8; font-size:.75rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
     .muted,small { color:#64748b; }
     .muted { margin:.35rem 0; }
     .panel { margin:1rem 0; padding:1.25rem; border:1px solid #e2e8f0; border-radius:14px; background:white; }
@@ -227,7 +227,7 @@ interface OptionDraft {
     .correct-option input { width:auto; }
     .remove-option,.add-option { padding:.55rem .75rem; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#334155; font:inherit; cursor:pointer; }
     .add-option { justify-self:start; }
-    .number { display:grid; place-items:center; min-width:1.6rem; height:1.6rem; border-radius:50%; color:#185adb; background:#e9f0ff; font-weight:800; }
+    .number { display:grid; place-items:center; min-width:1.6rem; height:1.6rem; border-radius:50%; color:#8dcab8; background:#e8f5ef; font-weight:800; }
     .question-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.8rem; margin-top:1rem; }
     label { display:grid; gap:.4rem; color:#334155; font-size:.86rem; font-weight:700; }
     input,select,textarea { width:100%; padding:.7rem; border:1px solid #cbd5e1; border-radius:8px; font:inherit; }

@@ -45,7 +45,7 @@ import { ButtonComponent } from '../shared/button.component';
   styles: [`
     .page-head { display:flex; align-items:end; justify-content:space-between; gap:1.5rem; flex-wrap:wrap; margin:1.5rem 0 2rem; }
     h1 { margin:.25rem 0; font-size:clamp(1.5rem,4vw,2rem); }
-    .eyebrow { color:#185adb; font-size:.75rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+    .eyebrow { color:#8dcab8; font-size:.75rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
     .muted,.description { color:#64748b; }
     .create-form { display:grid; grid-template-columns:minmax(200px,1fr) minmax(190px,auto) auto; gap:.6rem; }
     input,select { width:100%; padding:.75rem; border:1px solid #cbd5e1; border-radius:9px; font:inherit; }

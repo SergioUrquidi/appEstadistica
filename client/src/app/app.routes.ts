@@ -16,6 +16,7 @@ export const routes: Routes = [
   { path: 'generador-qr/:groupId', loadComponent: () => import('./pages/qr-generator.component').then((module) => module.QrGeneratorComponent), canActivate: [authGuard] },
   { path: 'estudios', loadComponent: () => import('./pages/estudios.component').then((module) => module.EstudiosComponent), canActivate: [authGuard] },
   { path: 'estudios/:id', loadComponent: () => import('./pages/estudio-detail.component').then((module) => module.EstudioDetailComponent), canActivate: [authGuard] },
+  { path: 'dashboard', loadComponent: () => import('./pages/feria-dashboard.component').then((module) => module.FeriaDashboardComponent) },
   { path: 'encuestas', component: SurveysComponent, canActivate: [authGuard] },
   { path: 'encuestas/:id', component: SurveyDetailComponent, canActivate: [authGuard] },
   { path: 'usuarios', component: UsersComponent, canActivate: [authGuard] },

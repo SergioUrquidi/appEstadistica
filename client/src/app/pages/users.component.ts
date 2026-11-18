@@ -10,7 +10,7 @@ interface ManagedUser {
   id: string;
   email: string;
   display_name: string;
-  role: 'superuser' | 'admin' | 'user';
+  role: 'superuser' | 'admin' | 'user' | 'encuestador';
   created_at: string;
 }
 
@@ -38,11 +38,16 @@ interface ManagedUser {
         <label>Contraseña temporal (mínimo 12 caracteres)
           <input name="password" type="password" [(ngModel)]="password" minlength="12" required>
         </label>
-        @if (auth.user()?.role === 'superuser') {
-          <label>Rol
-            <select name="role" [(ngModel)]="role"><option value="user">Usuario</option><option value="admin">Administrador</option><option value="superuser">Superusuario</option></select>
-          </label>
-        }
+        <label>Rol
+          <select name="role" [(ngModel)]="role">
+            <option value="user">Usuario</option>
+            <option value="encuestador">Encuestador</option>
+            @if (auth.user()?.role === 'superuser') {
+              <option value="admin">Administrador</option>
+              <option value="superuser">Superusuario</option>
+            }
+          </select>
+        </label>
         @if (error) { <p class="error" role="alert">{{ error }}</p> }
         @if (success) { <p class="success" role="status">{{ success }}</p> }
         <app-button type="submit" [disabled]="busy">{{ busy ? 'Creando…' : 'Crear usuario' }}</app-button>
@@ -61,7 +66,7 @@ interface ManagedUser {
     .page-head { margin:1.5rem 0 2rem; }
     h1 { margin:.25rem 0; font-size:clamp(1.5rem,4vw,2rem); }
     h2 { margin:.2rem 0 1rem; font-size:1.15rem; }
-    .eyebrow { color:#185adb; font-size:.75rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+    .eyebrow { color:#8dcab8; font-size:.75rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
     .muted { color:#64748b; }
     .panel { margin:1rem 0; padding:1.25rem; border:1px solid #e2e8f0; border-radius:14px; background:white; }
     form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; margin-top:1rem; }
@@ -142,6 +147,12 @@ export class UsersComponent implements OnInit {
   }
 
   roleLabel(role: ManagedUser['role']): string {
-    return role === 'superuser' ? 'Superusuario' : role === 'admin' ? 'Administrador' : 'Usuario';
+    const labels: Record<ManagedUser['role'], string> = {
+      superuser: 'Superusuario',
+      admin: 'Administrador',
+      user: 'Usuario',
+      encuestador: 'Encuestador',
+    };
+    return labels[role] ?? role;
   }
 }

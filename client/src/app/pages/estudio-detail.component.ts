@@ -32,6 +32,9 @@ import { StudyDetail, StudySurvey } from '../core/models';
           <span>respuestas totales</span>
           <small class="live-dot">● en vivo</small>
         </div>
+        <a class="btn-dashboard" [routerLink]="['/estudios', study.id, 'dashboard']">
+          📊 Ver dashboard
+        </a>
       </header>
 
       <div class="groups-grid">
@@ -98,7 +101,7 @@ import { StudyDetail, StudySurvey } from '../core/models';
     }
   `,
   styles: [`
-    .back-link { display:inline-block; color:#185adb; font-size:.85rem; font-weight:600; text-decoration:none; margin-bottom:1.25rem; }
+    .back-link { display:inline-block; color:#8dcab8; font-size:.85rem; font-weight:600; text-decoration:none; margin-bottom:1.25rem; }
     .back-link:hover { text-decoration:underline; }
 
     .page-head { display:flex; align-items:flex-start; justify-content:space-between; gap:1.5rem; flex-wrap:wrap; margin-bottom:2rem; }
@@ -114,6 +117,13 @@ import { StudyDetail, StudySurvey } from '../core/models';
     .shift-badge.shift-noche { background:#1e1b4b; color:#a5b4fc; }
     .status-badge { background:#f1f5f9; color:#475569; }
     .status-badge.status-activo { background:#dcfce7; color:#166534; }
+
+    .btn-dashboard {
+      display:inline-flex; align-items:center; gap:.4rem; padding:.65rem 1.1rem;
+      background:var(--color-action); color:#fff; border-radius:10px; font-size:.85rem; font-weight:700;
+      text-decoration:none; transition:background .15s; white-space:nowrap; align-self:flex-start;
+    }
+    .btn-dashboard:hover { background:var(--color-action-hover); }
 
     .total-badge {
       display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -134,7 +144,7 @@ import { StudyDetail, StudySurvey } from '../core/models';
     .group-card:hover { box-shadow:0 4px 16px rgba(0,0,0,.08); }
     .group-icon { font-size:1.75rem; line-height:1; }
     .group-info h2 { margin:0 0 .4rem; font-size:1rem; color:#0f172a; }
-    .response-count { font-size:2.8rem; font-weight:800; color:#185adb; line-height:1; }
+    .response-count { font-size:2.8rem; font-weight:800; color:#8dcab8; line-height:1; }
     .count-label { margin:0; color:#64748b; font-size:.78rem; }
 
     .group-actions { display:flex; align-items:center; justify-content:space-between; gap:.5rem; margin-top:auto; }
@@ -142,11 +152,11 @@ import { StudyDetail, StudySurvey } from '../core/models';
     .survey-status.active { color:#16a34a; }
     .survey-mode { color:#64748b; font-size:.7rem; }
     .btn-survey {
-      font-size:.78rem; font-weight:700; color:#185adb; text-decoration:none;
+      font-size:.78rem; font-weight:700; color:var(--color-action); text-decoration:none;
       padding:.35rem .75rem; border:1px solid #bfdbfe; border-radius:8px;
       transition:background .15s;
     }
-    .btn-survey:hover { background:#eff6ff; }
+    .btn-survey:hover { background:var(--color-action-soft); }
 
     .panel { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:1.5rem; }
     .target-section { margin-bottom:1.5rem; }
@@ -160,7 +170,7 @@ import { StudyDetail, StudySurvey } from '../core/models';
     .bar-row { display:grid; grid-template-columns:110px 1fr 40px; align-items:center; gap:.75rem; }
     .bar-label { font-size:.82rem; font-weight:600; color:#334155; }
     .bar-track { height:10px; background:#f1f5f9; border-radius:99px; overflow:hidden; }
-    .bar-fill { height:100%; background:#185adb; border-radius:99px; transition:width .4s ease; }
+    .bar-fill { height:100%; background:var(--color-action); border-radius:99px; transition:width .4s ease; }
     .bar-count { font-size:.82rem; font-weight:700; color:#334155; text-align:right; }
 
     .error { color:#b42318; }

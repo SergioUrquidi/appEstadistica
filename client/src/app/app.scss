@@ -1,7 +1,7 @@
 $sidebar-w: 230px;
 $sidebar-bg: #0f172a;
 $sidebar-border: #1e2d3d;
-$accent: #185adb;
+$accent: #8dcab8;
 $topbar-h: 56px;
 
 :host {
@@ -266,6 +266,36 @@ $topbar-h: 56px;
 .app-body--full {
   margin-left: 0;
   background: #f1f5f9;
+}
+
+/* Header público (sin login) */
+.topbar-public {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: .75rem 1.5rem;
+  background: #0f172a;
+  border-bottom: 1px solid #1e2d3d;
+}
+
+.topbar-public .topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  text-decoration: none;
+  flex: 1;
+}
+
+.topbar-dashboard-link {
+  color: #94a3b8;
+  font-size: .82rem;
+  font-weight: 600;
+  text-decoration: none;
+  padding: .35rem .75rem;
+  border-radius: 8px;
+  transition: background .15s, color .15s;
+  &:hover { background: #1e2d3d; color: #fff; }
+  &.active-link { background: #8dcab8; color: #333333; }
 }
 
 main {

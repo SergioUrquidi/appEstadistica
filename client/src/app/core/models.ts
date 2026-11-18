@@ -2,7 +2,7 @@ export interface User {
   id: string;
   email: string;
   display_name: string;
-  role: 'superuser' | 'admin' | 'user';
+  role: 'superuser' | 'admin' | 'user' | 'encuestador';
 }
 
 export interface Survey {

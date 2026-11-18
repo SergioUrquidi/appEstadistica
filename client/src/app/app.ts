@@ -35,9 +35,6 @@ import { ButtonComponent } from './shared/button.component';
           <span class="brand-text">Estadística<small>Encuestas y análisis</small></span>
         </a>
         <nav class="sidebar-nav">
-          <a routerLink="/estudios" routerLinkActive="active-link" (click)="menuOpen = false">
-            <span class="nav-icon">⬡</span><span class="nav-label">Ferias</span>
-          </a>
           <div class="nav-group">
             <a routerLink="/generador-qr" routerLinkActive="active-link" (click)="menuOpen = false">
               <span class="nav-icon">▦</span><span class="nav-label">Generador QR</span>
@@ -52,6 +49,14 @@ import { ButtonComponent } from './shared/button.component';
             </div>
           </div>
 
+          <a routerLink="/dashboard" routerLinkActive="active-link" (click)="menuOpen = false">
+            <span class="nav-icon">📊</span><span class="nav-label">Dashboard</span>
+          </a>
+          @if (user.role !== 'encuestador') {
+            <a routerLink="/estudios" routerLinkActive="active-link" (click)="menuOpen = false">
+              <span class="nav-icon">⬡</span><span class="nav-label">Ferias</span>
+            </a>
+          }
           @if (user.role === 'admin' || user.role === 'superuser') {
             <a routerLink="/usuarios" routerLinkActive="active-link" (click)="menuOpen = false">
               <span class="nav-icon">⊹</span><span class="nav-label">Usuarios</span>
@@ -73,6 +78,13 @@ import { ButtonComponent } from './shared/button.component';
       </div>
     } @else {
       <div class="app-body app-body--full">
+        <header class="topbar-public">
+          <a class="topbar-brand" routerLink="/dashboard">
+            <span class="brand-mark">Σ</span>
+            <span class="brand-text">Estadística</span>
+          </a>
+          <a class="topbar-dashboard-link" routerLink="/dashboard" routerLinkActive="active-link">Dashboard</a>
+        </header>
         <main><router-outlet /></main>
       </div>
     }
@@ -126,6 +138,12 @@ export class App implements OnInit {
   }
 
   roleLabel(role: string): string {
-    return role === 'superuser' ? 'Superusuario' : role === 'admin' ? 'Administrador' : 'Usuario';
+    const labels: Record<string, string> = {
+      superuser: 'Superusuario',
+      admin: 'Administrador',
+      user: 'Usuario',
+      encuestador: 'Encuestador',
+    };
+    return labels[role] ?? role;
   }
 }

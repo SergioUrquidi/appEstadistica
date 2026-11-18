@@ -65,7 +65,7 @@ export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'quiet' | 'tab'
     }
 
     .action-button:focus-visible {
-      outline: 3px solid #93c5fd;
+      outline: 3px solid var(--color-focus-ring);
       outline-offset: 2px;
     }
 
@@ -75,13 +75,13 @@ export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'quiet' | 'tab'
     }
 
     .button--primary {
-      color: #fff;
+      color: #333333;
       background: var(--color-action);
     }
 
     .button--primary:hover:not(:disabled) {
       background: var(--color-action-hover);
-      box-shadow: 0 3px 8px #185adb35;
+      box-shadow: 0 3px 8px #8dcab840;
     }
 
     .button--secondary {
@@ -103,12 +103,12 @@ export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'quiet' | 'tab'
     }
 
     .button--quiet {
-      color: #334155;
-      background: #f1f5f9;
+      color: var(--color-quiet-text);
+      background: var(--color-quiet-bg);
     }
 
     .button--quiet:hover:not(:disabled) {
-      background: #e2e8f0;
+      background: var(--color-quiet-bg-hover);
     }
 
     .button--tab,
@@ -132,7 +132,7 @@ export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'quiet' | 'tab'
     .button--tab-active {
       color: var(--color-action-text);
       border-bottom-color: var(--color-action);
-      background: #eff6ff;
+      background: var(--color-action-soft);
     }
 
     @media (prefers-reduced-motion: reduce) {

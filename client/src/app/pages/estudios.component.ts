@@ -5,7 +5,7 @@ import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../core/auth.service';
-import { Group, RespondentGroup, Study, SurveyMode } from '../core/models';
+import { Group, Study, SurveyMode } from '../core/models';
 import { ButtonComponent } from '../shared/button.component';
 
 @Component({
@@ -79,27 +79,7 @@ import { ButtonComponent } from '../shared/button.component';
               }
             </div>
           </div>
-          <div class="wide groups-select">
-            <span class="groups-label">Tipos de encuestado y cantidad objetivo</span>
-            <div class="groups-checks">
-              @for (group of respondentGroups; track group.value) {
-                <div class="group-target">
-                  <label class="check-item">
-                    <input type="checkbox"
-                      [checked]="isRespondentGroupSelected(group.value)"
-                      (change)="toggleRespondentGroup(group.value)">
-                    <span>{{ group.label | titlecase }}</span>
-                  </label>
-                  @if (isRespondentGroupSelected(group.value)) {
-                    <label class="target-item">Cantidad objetivo
-                      <input [name]="'respondent-target-' + group.value" type="number" min="0" max="2147483647" step="1"
-                        [(ngModel)]="respondentTargetCounts[group.value]" required>
-                    </label>
-                  }
-                </div>
-              }
-            </div>
-          </div>
+
           @if (formError) { <p class="error wide" role="alert">{{ formError }}</p> }
           <app-button type="submit" class="wide" [disabled]="busy || !form.modeCode || !validTargets">
             {{ busy ? 'Creando…' : 'Crear feria y ' + selectedGroupNames.size + ' encuesta' + (selectedGroupNames.size !== 1 ? 's' : '') }}
@@ -138,7 +118,7 @@ import { ButtonComponent } from '../shared/button.component';
   styles: [`
     .page-head { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:1.75rem; flex-wrap:wrap; }
     h1 { margin:.25rem 0 .5rem; font-size:clamp(1.5rem,4vw,2rem); }
-    .eyebrow { color:#185adb; font-size:.72rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; margin:0 0 .2rem; }
+    .eyebrow { color:#8dcab8; font-size:.72rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; margin:0 0 .2rem; }
     .muted { color:#64748b; margin:0; font-size:.88rem; }
 
     .form-panel { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:1.5rem; margin-bottom:1.5rem; }
@@ -156,7 +136,7 @@ import { ButtonComponent } from '../shared/button.component';
     .groups-checks { display:flex; flex-wrap:wrap; gap:.5rem; }
     .check-item { display:flex; align-items:center; gap:.4rem; font-size:.85rem; font-weight:500; color:#334155;
       background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:.4rem .75rem; cursor:pointer; }
-    .check-item input { accent-color:#185adb; cursor:pointer; }
+    .check-item input { accent-color:#8dcab8; cursor:pointer; }
     .group-target { display:grid; gap:.45rem; min-width:190px; }
     .target-item { display:grid; gap:.25rem; color:#475569; font-size:.75rem; font-weight:600; }
     .target-item input { width:100%; padding:.45rem .6rem; border:1px solid #cbd5e1; border-radius:7px; font:inherit; }
@@ -200,12 +180,9 @@ import { ButtonComponent } from '../shared/button.component';
 export class EstudiosComponent implements OnInit {
   studies: Study[] = [];
   groups: Group[] = [];
-  respondentGroups: RespondentGroup[] = [];
   modes: SurveyMode[] = [];
   selectedGroupNames = new Set<string>();
   targetCounts: Record<string, number | null | undefined> = {};
-  selectedRespondentGroups = new Set<string>();
-  respondentTargetCounts: Record<string, number | null | undefined> = {};
   loading = true;
   busy = false;
   showForm = false;
@@ -227,7 +204,7 @@ export class EstudiosComponent implements OnInit {
     return user?.role === 'admin' || user?.role === 'superuser';
   }
 
-  get validGroupTargets(): boolean {
+  get validTargets(): boolean {
     return this.selectedGroupNames.size > 0
       && Array.from(this.selectedGroupNames).every((name) => {
         const target = this.targetCounts[name];
@@ -235,24 +212,12 @@ export class EstudiosComponent implements OnInit {
       });
   }
 
-  get validRespondentTargets(): boolean {
-    return Array.from(this.selectedRespondentGroups).every((value) => {
-      const target = this.respondentTargetCounts[value];
-      return typeof target === 'number' && Number.isInteger(target) && target >= 0;
-    });
-  }
-
-  get validTargets(): boolean {
-    return this.validGroupTargets && this.validRespondentTargets;
-  }
-
   async ngOnInit(): Promise<void> {
     try {
-      [this.studies, this.groups, this.modes, this.respondentGroups] = await Promise.all([
+      [this.studies, this.groups, this.modes] = await Promise.all([
         firstValueFrom(this.http.get<Study[]>('/api/estudios')),
         firstValueFrom(this.http.get<Group[]>('/api/grupos')),
         firstValueFrom(this.http.get<SurveyMode[]>('/api/survey-modes')),
-        firstValueFrom(this.http.get<RespondentGroup[]>('/api/respondent-groups')),
       ]);
       this.selectedGroupNames = new Set(this.groups.map((g) => g.nombre));
     } finally {
@@ -275,20 +240,6 @@ export class EstudiosComponent implements OnInit {
     return this.selectedGroupNames.has(nombre);
   }
 
-  toggleRespondentGroup(value: string): void {
-    if (this.selectedRespondentGroups.has(value)) {
-      this.selectedRespondentGroups.delete(value);
-      delete this.respondentTargetCounts[value];
-    } else {
-      this.selectedRespondentGroups.add(value);
-    }
-    this.selectedRespondentGroups = new Set(this.selectedRespondentGroups);
-  }
-
-  isRespondentGroupSelected(value: string): boolean {
-    return this.selectedRespondentGroups.has(value);
-  }
-
   async createStudy(): Promise<void> {
     if (!this.form.title.trim() || !this.form.shift || !this.form.modeCode || !this.validTargets) {
       if (!this.validTargets) this.formError = 'Ingresa una cantidad objetivo entera para cada grupo seleccionado.';
@@ -297,6 +248,10 @@ export class EstudiosComponent implements OnInit {
     this.busy = true;
     this.formError = '';
     try {
+      const groupTargets = Array.from(this.selectedGroupNames, (group) => ({
+        group,
+        targetCount: Number(this.targetCounts[group]),
+      }));
       const created = await firstValueFrom(this.http.post<Study>('/api/estudios', {
         title: this.form.title.trim(),
         description: this.form.description.trim(),
@@ -304,13 +259,10 @@ export class EstudiosComponent implements OnInit {
         modeCode: this.form.modeCode,
         date: this.form.date || undefined,
         groups: Array.from(this.selectedGroupNames),
-        groupTargets: Array.from(this.selectedGroupNames, (group) => ({
-          group,
-          targetCount: Number(this.targetCounts[group]),
-        })),
-        respondentTargets: Array.from(this.selectedRespondentGroups, (value) => ({
-          respondentGroup: value,
-          targetCount: Number(this.respondentTargetCounts[value]),
+        groupTargets,
+        respondentTargets: groupTargets.map(({ group, targetCount }) => ({
+          respondentGroup: group,
+          targetCount,
         })),
       }));
       this.studies = [created, ...this.studies];
@@ -318,8 +270,6 @@ export class EstudiosComponent implements OnInit {
       this.form = { title: '', description: '', shift: 'mañana', date: '', modeCode: '' };
       this.targetCounts = {};
       this.selectedGroupNames = new Set(this.groups.map((g) => g.nombre));
-      this.selectedRespondentGroups.clear();
-      this.respondentTargetCounts = {};
     } catch {
       this.formError = 'No se pudo crear la feria. Verificá los datos e intentá nuevamente.';
     } finally {

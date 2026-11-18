@@ -111,7 +111,7 @@ interface PublicSurvey {
   styles: [`
     .response-card { max-width:650px; margin:4vh auto; padding:clamp(1.25rem,4vw,2.5rem); background:white; border:1px solid #e2e8f0; border-radius:18px; }
     h1 { margin:.3rem 0 1rem; font-size:clamp(1.6rem,4vw,2.2rem); }
-    .eyebrow { color:#185adb; font-size:.75rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+    .eyebrow { color:#8dcab8; font-size:.75rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
     .muted,.bounds { color:#64748b; }
     form { display:grid; gap:1.3rem; margin-top:1.6rem; }
     .question { display:grid; gap:.55rem; font-weight:700; }
@@ -125,7 +125,7 @@ interface PublicSurvey {
     .success-mark { display:grid; place-items:center; width:3rem; height:3rem; border-radius:50%; color:#166534; background:#dcfce7; font-size:1.5rem; }
     .result-panel { margin-top:1.5rem; padding-top:1rem; border-top:1px solid #e2e8f0; }
     .result-panel h2 { font-size:1.2rem; }
-    .score { margin:.3rem 0; color:#185adb; font-size:2rem; font-weight:800; }
+    .score { margin:.3rem 0; color:#8dcab8; font-size:2rem; font-weight:800; }
     .result-question { display:grid; gap:.35rem; margin-top:.8rem; padding:.75rem; border-radius:9px; background:#f8fafc; }
     .result-question small,.muted { color:#64748b; }
     @media(max-width:640px) {
@@ -184,6 +184,19 @@ export class RespondComponent implements OnInit {
     if (!this.survey || this.survey.questions.some((question) => !this.hasAnswer(question))) {
       this.error = 'Responde todas las preguntas antes de enviar.';
       return;
+    }
+    for (const q of this.survey.questions) {
+      if (!q.is_numeric) continue;
+      const val = this.answers[q.id];
+      if (typeof val !== 'number') continue;
+      if (q.min_value !== null && val < q.min_value) {
+        this.error = `"${q.prompt}": el valor mínimo permitido es ${q.min_value}.`;
+        return;
+      }
+      if (q.max_value !== null && val > q.max_value) {
+        this.error = `"${q.prompt}": el valor máximo permitido es ${q.max_value}.`;
+        return;
+      }
     }
     this.busy = true;
     this.error = '';

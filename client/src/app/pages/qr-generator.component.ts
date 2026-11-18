@@ -56,31 +56,20 @@ interface PendingCode {
         <p class="muted">No hay encuestas activas para este grupo.</p>
       } @else {
 
-        @if (isSuperuser && surveyId) {
-          <div class="cupo-editor">
+        @if (canSeeCupos && cupos.length) {
+          <div class="cupo-info">
             <h2>Cupos por tipo de encuestado</h2>
-            <p class="muted cupo-hint">Define el límite de QR para cada tipo. Los cambios aplican de inmediato.</p>
+            <p class="muted cupo-hint">Límites configurados al crear la feria.</p>
             <div class="cupo-table-wrap">
               <table class="cupo-table">
-                <thead><tr><th>Tipo</th><th>Cupo asignado</th><th>Completados</th><th>Disponibles</th><th></th></tr></thead>
+                <thead><tr><th>Tipo</th><th>Cupo total</th><th>Completados</th><th>Disponibles</th></tr></thead>
                 <tbody>
-                  @for (rg of respondentGroups; track rg.value) {
+                  @for (c of cupos; track c.grupoEncuestado) {
                     <tr>
-                      <td class="grupo-name">{{ rg.label | titlecase }}</td>
-                      <td>
-                        <input class="cupo-input" type="number" min="0" max="10000" step="1"
-                          [(ngModel)]="cupoEdits[rg.value]"
-                          [placeholder]="getCupoPlaceholder(rg.value)">
-                      </td>
-                      <td class="num">{{ getCupoGrupo(rg.value)?.cupoCompletados ?? '—' }}</td>
-                      <td class="num" [class.agotado]="getCupoGrupo(rg.value)?.cupoDisponible === 0">
-                        {{ getCupoGrupo(rg.value)?.cupoDisponible ?? '—' }}
-                      </td>
-                      <td>
-                        <button class="btn-save" (click)="saveCupo(rg.value)" [disabled]="busyCupo[rg.value]">
-                          {{ busyCupo[rg.value] ? '…' : 'Guardar' }}
-                        </button>
-                      </td>
+                      <td class="grupo-name">{{ c.grupoEncuestado | titlecase }}</td>
+                      <td class="num">{{ c.cupo }}</td>
+                      <td class="num">{{ c.cupoCompletados }}</td>
+                      <td class="num" [class.agotado]="c.cupoDisponible === 0">{{ c.cupoDisponible }}</td>
                     </tr>
                   }
                 </tbody>
@@ -198,10 +187,10 @@ interface PendingCode {
     .page-head { margin:1.5rem 0 2rem; }
     h1 { margin:.25rem 0; font-size:clamp(1.5rem,4vw,2rem); }
     h2 { margin:.2rem 0 .4rem; font-size:1.15rem; }
-    .eyebrow { color:#185adb; font-size:.75rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+    .eyebrow { color:#8dcab8; font-size:.75rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
     .muted { color:#64748b; }
     .panel { margin:1rem 0; padding:1.25rem; border:1px solid #e2e8f0; border-radius:14px; background:white; }
-    .cupo-editor { margin-bottom:1.25rem; padding-bottom:1.25rem; border-bottom:1px solid #f1f5f9; }
+    .cupo-info { margin-bottom:1.25rem; padding-bottom:1.25rem; border-bottom:1px solid #f1f5f9; }
     .cupo-hint { font-size:.82rem; margin:.25rem 0 .75rem; }
     .cupo-table-wrap { overflow-x:auto; }
     .cupo-table { width:100%; border-collapse:collapse; font-size:.88rem; }
@@ -212,10 +201,6 @@ interface PendingCode {
     .grupo-name { font-weight:600; }
     .num { text-align:center; font-variant-numeric:tabular-nums; }
     .num.agotado { color:#dc2626; font-weight:700; }
-    .cupo-input { width:90px; padding:.45rem .6rem; border:1px solid #cbd5e1; border-radius:7px; font:inherit; font-size:.88rem; }
-    .btn-save { padding:.4rem .8rem; border:1px solid #185adb; border-radius:7px; background:white; color:#185adb; font:inherit; font-size:.82rem; font-weight:700; cursor:pointer; }
-    .btn-save:hover:not(:disabled) { background:#185adb; color:white; }
-    .btn-save:disabled { opacity:.5; cursor:not-allowed; }
     .generator-form { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) 130px auto; gap:.8rem; align-items:end; margin-top:1rem; }
     label { display:grid; gap:.4rem; color:#334155; font-size:.86rem; font-weight:700; }
     input,select { width:100%; padding:.7rem; border:1px solid #cbd5e1; border-radius:8px; font:inherit; }
@@ -228,12 +213,12 @@ interface PendingCode {
     .invitation { display:flex; align-items:center; gap:.8rem; min-width:0; padding:.75rem; border:1px solid #e2e8f0; border-radius:10px; }
     .invitation img { width:92px; height:92px; }
     .invitation div { display:grid; min-width:0; gap:.35rem; }
-    .invitation a { overflow-wrap:anywhere; color:#185adb; font-size:.78rem; }
+    .invitation a { overflow-wrap:anywhere; color:#8dcab8; font-size:.78rem; }
     .download-link { font-weight:700; }
     .pending-panel { margin-top:1.2rem; }
     .pending-head { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:.75rem; }
     .pending-head h2 { margin:.2rem 0 .25rem; font-size:1.15rem; }
-    .grupo-badge { font-size:.82rem; font-weight:700; color:#185adb; }
+    .grupo-badge { font-size:.82rem; font-weight:700; color:#8dcab8; }
     .btn-refresh { padding:.4rem .75rem; border:1px solid #cbd5e1; border-radius:7px; background:white; color:#334155; font:inherit; font-size:1rem; cursor:pointer; flex-shrink:0; }
     .btn-refresh:hover:not(:disabled) { background:#f8fafc; }
     .btn-refresh:disabled { opacity:.5; cursor:not-allowed; }
@@ -245,7 +230,7 @@ interface PendingCode {
     tbody tr:last-child td { border-bottom:0; }
     tbody tr:hover td { background:#f8faff; }
     .idx { width:2.5rem; text-align:center; color:#94a3b8; font-weight:700; font-size:.82rem; }
-    .url-cell a { color:#185adb; overflow-wrap:anywhere; font-size:.82rem; }
+    .url-cell a { color:#8dcab8; overflow-wrap:anywhere; font-size:.82rem; }
     .date-cell { white-space:nowrap; color:#64748b; font-size:.82rem; }
     .empty-pending { text-align:center; padding:1.5rem 0; }
     .pending-count { margin:.75rem 0 0; font-size:.8rem; color:#64748b; text-align:right; }
@@ -258,15 +243,15 @@ interface PendingCode {
     .qr-expand-img { width:140px; height:140px; border:1px solid #e2e8f0; border-radius:8px; flex-shrink:0; }
     .qr-expand-info { display:flex; flex-direction:column; gap:.5rem; min-width:0; }
     .qr-expand-label { font-weight:700; font-size:.9rem; color:#334155; margin:0; }
-    .qr-expand-url { color:#185adb; font-size:.78rem; overflow-wrap:anywhere; }
-    .qr-expand-dl { font-weight:700; font-size:.82rem; color:#185adb; }
+    .qr-expand-url { color:#8dcab8; font-size:.78rem; overflow-wrap:anywhere; }
+    .qr-expand-dl { font-weight:700; font-size:.82rem; color:#8dcab8; }
     @media(max-width:860px) { .generator-form { grid-template-columns:1fr 1fr; } }
     @media(max-width:640px) {
       .generator-form { grid-template-columns:1fr; }
       .submit-wrap { flex-direction:row; align-items:center; }
-      .cupo-editor { padding-bottom:1rem; }
+      .cupo-info { padding-bottom:1rem; }
       .cupo-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
-      .cupo-table { min-width:400px; }
+      .cupo-table { min-width:320px; }
       .panel { padding:.875rem .75rem; }
       h1 { font-size:1.4rem; }
       .invitation-list { grid-template-columns:1fr; }
@@ -286,8 +271,6 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
   respondentGroup = '';
   count: number | null = 1;
   cupos: CupoGrupo[] = [];
-  cupoEdits: Record<string, number | null> = {};
-  busyCupo: Record<string, boolean> = {};
   invitations: Invitation[] = [];
   pendingCodes: PendingCode[] = [];
   loadingPending = false;
@@ -313,6 +296,11 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
     return this.auth.user()?.role === 'superuser';
   }
 
+  get canSeeCupos(): boolean {
+    const role = this.auth.user()?.role;
+    return role === 'superuser' || role === 'admin';
+  }
+
   get selectedGroup(): Group | undefined {
     return this.groups.find((group) => group.id === this.selectedGroupId);
   }
@@ -330,11 +318,6 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
 
   getCupoGrupo(grupo: string): CupoGrupo | undefined {
     return this.cupos.find((c) => c.grupoEncuestado === grupo);
-  }
-
-  getCupoPlaceholder(grupo: string): string {
-    const c = this.getCupoGrupo(grupo);
-    return c ? String(c.cupo) : 'Sin límite';
   }
 
   async ngOnInit(): Promise<void> {
@@ -382,8 +365,10 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
     this.error = '';
     this.surveys = [];
     this.surveyId = '';
+    this.respondentGroup = '';
     this.cupos = [];
     this.invitations = [];
+    this.pendingCodes = [];
     const requestId = ++this.surveyRequest;
     try {
       const params = new HttpParams().set('groupId', group.id);
@@ -460,36 +445,8 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
   private async loadCupos(): Promise<void> {
     try {
       this.cupos = await firstValueFrom(this.http.get<CupoGrupo[]>(`/api/surveys/${this.surveyId}/cupos`));
-      this.syncCupoEdits();
     } catch {
       this.cupos = [];
-    }
-  }
-
-  private syncCupoEdits(): void {
-    const edits: Record<string, number | null> = {};
-    for (const rg of this.respondentGroups) {
-      const c = this.getCupoGrupo(rg.value);
-      edits[rg.value] = c ? c.cupo : null;
-    }
-    this.cupoEdits = edits;
-  }
-
-  async saveCupo(grupo: string): Promise<void> {
-    if (!this.surveyId) return;
-    const val = this.cupoEdits[grupo];
-    if (val === null || val === undefined) return;
-    this.busyCupo = { ...this.busyCupo, [grupo]: true };
-    this.error = '';
-    try {
-      this.cupos = await firstValueFrom(
-        this.http.put<CupoGrupo[]>(`/api/surveys/${this.surveyId}/cupos/${encodeURIComponent(grupo)}`, { cupo: val }),
-      );
-    } catch {
-      this.error = `No se pudo guardar el cupo de "${grupo}".`;
-    } finally {
-      this.busyCupo = { ...this.busyCupo, [grupo]: false };
-      this.cdr.markForCheck();
     }
   }
 
