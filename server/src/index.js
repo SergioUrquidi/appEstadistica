@@ -280,7 +280,7 @@ app.get('/api/survey-modes', authenticate, asyncRoute(async (_req, res) => {
   return res.json(result.rows);
 }));
 
-app.post('/api/surveys', authenticate, asyncRoute(async (req, res) => {
+app.post('/api/surveys', authenticate, allowRoles('admin', 'superuser', 'user'), asyncRoute(async (req, res) => {
   const input = validate(z.object({
     title: z.string().trim().min(1).max(200),
     description: z.string().max(5000).default(''),
@@ -324,7 +324,7 @@ app.get('/api/question-types', authenticate, asyncRoute(async (_req, res) => {
   return res.json(result.rows);
 }));
 
-app.put('/api/surveys/:surveyId/mode', authenticate, asyncRoute(async (req, res) => {
+app.put('/api/surveys/:surveyId/mode', authenticate, allowRoles('admin', 'superuser', 'user'), asyncRoute(async (req, res) => {
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
   if (survey.status !== 'draft') return res.status(409).json({ error: 'Solo se puede definir el enfoque de un borrador.' });
@@ -345,7 +345,7 @@ app.put('/api/surveys/:surveyId/mode', authenticate, asyncRoute(async (req, res)
   return res.json(result.rows[0]);
 }));
 
-app.post('/api/surveys/:surveyId/questions', authenticate, asyncRoute(async (req, res) => {
+app.post('/api/surveys/:surveyId/questions', authenticate, allowRoles('admin', 'superuser', 'user'), asyncRoute(async (req, res) => {
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
   if (survey.status !== 'draft') return res.status(409).json({ error: 'No se pueden cambiar preguntas después de activar la encuesta.' });
@@ -391,7 +391,7 @@ app.post('/api/surveys/:surveyId/questions', authenticate, asyncRoute(async (req
   return res.status(201).json(question.rows[0]);
 }));
 
-app.put('/api/surveys/:surveyId/questions/:questionId/answer-key', authenticate, asyncRoute(async (req, res) => {
+app.put('/api/surveys/:surveyId/questions/:questionId/answer-key', authenticate, allowRoles('admin', 'superuser', 'user'), asyncRoute(async (req, res) => {
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
   if (survey.status !== 'draft' || !survey.requires_correct_answer) {
@@ -418,7 +418,7 @@ app.put('/api/surveys/:surveyId/questions/:questionId/answer-key', authenticate,
   return res.json(question.rows[0]);
 }));
 
-app.post('/api/surveys/:surveyId/activate', authenticate, asyncRoute(async (req, res) => {
+app.post('/api/surveys/:surveyId/activate', authenticate, allowRoles('admin', 'superuser', 'user'), asyncRoute(async (req, res) => {
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
   if (survey.status !== 'draft') return res.status(409).json({ error: 'Solo se pueden activar encuestas en borrador.' });
@@ -727,7 +727,7 @@ app.get('/api/surveys/:surveyId/analysis', authenticate, asyncRoute(async (req, 
   return res.json(result.rows[0] ?? { body: '', version: 0, updated_at: null });
 }));
 
-app.put('/api/surveys/:surveyId/analysis', authenticate, asyncRoute(async (req, res) => {
+app.put('/api/surveys/:surveyId/analysis', authenticate, allowRoles('admin', 'superuser', 'user'), asyncRoute(async (req, res) => {
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
   const input = validate(z.object({ body: z.string().max(50000) }), req.body);
