@@ -32,6 +32,9 @@ import { StudyDetail, StudySurvey } from '../core/models';
           <span>respuestas totales</span>
           <small class="live-dot">● en vivo</small>
         </div>
+        <a class="btn-dashboard" [routerLink]="['/estudios', study.id, 'dashboard']">
+          📊 Ver dashboard
+        </a>
       </header>
 
       <div class="groups-grid">
@@ -114,6 +117,13 @@ import { StudyDetail, StudySurvey } from '../core/models';
     .shift-badge.shift-noche { background:#1e1b4b; color:#a5b4fc; }
     .status-badge { background:#f1f5f9; color:#475569; }
     .status-badge.status-activo { background:#dcfce7; color:#166534; }
+
+    .btn-dashboard {
+      display:inline-flex; align-items:center; gap:.4rem; padding:.65rem 1.1rem;
+      background:#185adb; color:#fff; border-radius:10px; font-size:.85rem; font-weight:700;
+      text-decoration:none; transition:background .15s; white-space:nowrap; align-self:flex-start;
+    }
+    .btn-dashboard:hover { background:#1e3a8a; }
 
     .total-badge {
       display:flex; flex-direction:column; align-items:center; justify-content:center;

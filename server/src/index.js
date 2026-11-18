@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import crypto from 'node:crypto';
 import http from 'node:http';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 import cors from 'cors';
 import express from 'express';
@@ -26,11 +28,12 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: process.env.CLIENT_ORIGIN } });
 const port = Number(process.env.PORT ?? 3000);
-const roles = ['superuser', 'admin', 'user'];
+const roles = ['superuser', 'admin', 'user', 'encuestador'];
 const databaseRoles = {
   superuser: 'superusuario',
   admin: 'administrador',
   user: 'usuario',
+  encuestador: 'encuestador',
 };
 
 app.use(helmet());
@@ -88,7 +91,17 @@ async function findSurveyForUser(surveyId, user) {
   const survey = result.rows[0];
   if (!survey) return { error: 'No se encontró la encuesta.', status: 404 };
   if (!['admin', 'superuser'].includes(user.role) && survey.creator_id !== user.sub) {
-    return { error: 'No tienes permisos para esta operación.', status: 403 };
+    if (user.role === 'encuestador') {
+      const assigned = await pool.query(
+        'SELECT estadistica.fn_encuestador_asignado($1, $2) AS asignado',
+        [user.sub, surveyId],
+      );
+      if (!assigned.rows[0]?.asignado) {
+        return { error: 'No tienes permisos para esta operación.', status: 403 };
+      }
+    } else {
+      return { error: 'No tienes permisos para esta operación.', status: 403 };
+    }
   }
   const modeResult = await pool.query(
     'SELECT * FROM estadistica.fn_modo_de_encuesta($1)',
@@ -208,10 +221,10 @@ app.post('/api/users', authenticate, allowRoles('admin', 'superuser'), asyncRout
     email: z.string().email().max(254),
     displayName: z.string().trim().min(1).max(120),
     password: z.string().min(12).max(200),
-    role: z.enum(['superuser', 'admin', 'user']),
+    role: z.enum(['superuser', 'admin', 'user', 'encuestador']),
   }), req.body);
-  if (req.user.role !== 'superuser' && input.role !== 'user') {
-    return res.status(403).json({ error: 'Los administradores solo pueden crear usuarios regulares.' });
+  if (req.user.role !== 'superuser' && !['user', 'encuestador'].includes(input.role)) {
+    return res.status(403).json({ error: 'Los administradores solo pueden crear usuarios regulares o encuestadores.' });
   }
   const passwordHash = await bcrypt.hash(input.password, 12);
   try {
@@ -237,6 +250,13 @@ app.get('/api/surveys', authenticate, asyncRoute(async (req, res) => {
       [groupId],
     );
     if (!group.rows[0]) return res.status(404).json({ error: 'No se encontró el grupo activo.' });
+  }
+  if (req.user.role === 'encuestador') {
+    const result = await pool.query(
+      'SELECT * FROM estadistica.fn_encuestas_asignadas_encuestador($1, $2)',
+      [req.user.sub, groupId],
+    );
+    return res.json(result.rows);
   }
   const result = await pool.query(
     'SELECT * FROM estadistica.fn_encuestas_usuario_por_grupo($1, $2, $3)',
@@ -423,14 +443,65 @@ app.post('/api/surveys/:surveyId/activate', authenticate, asyncRoute(async (req,
   return res.json({ id: survey.id, status: 'active' });
 }));
 
+app.get('/api/surveys/:surveyId/cupos', authenticate, asyncRoute(async (req, res) => {
+  const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
+  if (error) return res.status(status).json({ error });
+  const result = await pool.query(
+    'SELECT * FROM estadistica.fn_cupos_encuesta($1)', [survey.id],
+  );
+  return res.json(result.rows.map((r) => ({
+    grupoEncuestado: r.grupo_encuestado,
+    cupo: Number(r.cupo),
+    cupoCompletados: Number(r.cupo_completados),
+    cupoDisponible: Number(r.cupo_disponible),
+  })));
+}));
+
+app.put('/api/surveys/:surveyId/cupos/:grupo', authenticate, allowRoles('superuser'), asyncRoute(async (req, res) => {
+  const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
+  if (error) return res.status(status).json({ error });
+  const grupo = req.params.grupo;
+  const allowedGroup = await pool.query(
+    'SELECT estadistica.fn_grupo_encuestado_activo($1) AS activo', [grupo],
+  );
+  if (!allowedGroup.rows[0]?.activo) return res.status(400).json({ error: 'El tipo de encuestado no existe.' });
+  const input = validate(z.object({
+    cupo: z.number().int().min(0).max(10000),
+  }), req.body);
+  await pool.query(
+    'CALL estadistica.usp_set_cupo_encuesta($1, $2, $3, $4)',
+    [survey.id, grupo, input.cupo, req.user.sub],
+  );
+  const result = await pool.query('SELECT * FROM estadistica.fn_cupos_encuesta($1)', [survey.id]);
+  return res.json(result.rows.map((r) => ({
+    grupoEncuestado: r.grupo_encuestado,
+    cupo: Number(r.cupo),
+    cupoCompletados: Number(r.cupo_completados),
+    cupoDisponible: Number(r.cupo_disponible),
+  })));
+}));
+
+app.delete('/api/surveys/:surveyId/cupos/:grupo', authenticate, allowRoles('superuser'), asyncRoute(async (req, res) => {
+  const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
+  if (error) return res.status(status).json({ error });
+  await pool.query(
+    'CALL estadistica.usp_del_cupo_encuesta($1, $2)',
+    [survey.id, req.params.grupo],
+  );
+  return res.status(204).end();
+}));
+
 app.post('/api/surveys/:surveyId/codes', authenticate, asyncRoute(async (req, res) => {
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
   if (survey.status !== 'active') return res.status(409).json({ error: 'Activa la encuesta antes de generar invitaciones.' });
+  const isSuperuser = req.user.role === 'superuser';
   const input = validate(z.object({
     surveyGroupId: z.string().uuid(),
     respondentGroup: z.string().trim().min(1),
-    count: z.number().int().min(1).max(100),
+    count: isSuperuser
+      ? z.number().int().min(1).max(100)
+      : z.number().int().min(1).max(1),
   }), req.body);
   const surveyGroup = await pool.query(
     'SELECT * FROM estadistica.fn_grupo_de_encuesta($1)', [survey.id],
@@ -442,14 +513,38 @@ app.post('/api/surveys/:surveyId/codes', authenticate, asyncRoute(async (req, re
     'SELECT estadistica.fn_grupo_encuestado_activo($1) AS activo', [input.respondentGroup],
   );
   if (!allowedGroup.rows[0]?.activo) return res.status(400).json({ error: 'El tipo de encuestado no existe.' });
+  if (req.user.role === 'encuestador') {
+    const assignedGroups = await pool.query(
+      'SELECT grupo_encuestado FROM estadistica.fn_grupos_encuestador_en_encuesta($1, $2)',
+      [req.user.sub, survey.id],
+    );
+    const allowed = assignedGroups.rows.some((r) => r.grupo_encuestado === input.respondentGroup);
+    if (!allowed) {
+      return res.status(403).json({ error: 'No tienes asignación para este tipo de encuestado en esta encuesta.' });
+    }
+  }
+  const disponible = await pool.query(
+    'SELECT estadistica.fn_cupo_grupo_encuesta($1, $2) AS disponible',
+    [survey.id, input.respondentGroup],
+  );
+  const disp = disponible.rows[0]?.disponible;
+  if (disp !== null && disp !== undefined && Number(disp) < input.count) {
+    const n = Number(disp);
+    return res.status(409).json({
+      error: n === 0
+        ? `El cupo para "${input.respondentGroup}" se agotó en esta encuesta.`
+        : `Solo quedan ${n} QR disponibles para "${input.respondentGroup}".`,
+    });
+  }
+  const baseUrl = process.env.PUBLIC_APP_URL.replace(/\/$/, '');
   const invitations = [];
   for (let index = 0; index < input.count; index += 1) {
     const token = crypto.randomBytes(24).toString('base64url');
     await pool.query(
-      'CALL estadistica.usp_insertar_codigo_encuesta($1, $2, $3, $4)',
-      [survey.id, req.user.sub, input.respondentGroup, tokenHash(token)],
+      'CALL estadistica.usp_insertar_codigo_encuesta($1, $2, $3, $4, $5)',
+      [survey.id, req.user.sub, input.respondentGroup, tokenHash(token), token],
     );
-    const url = `${process.env.PUBLIC_APP_URL.replace(/\/$/, '')}/respond/${token}`;
+    const url = `${baseUrl}/respond/${token}`;
     invitations.push({
       respondentGroup: input.respondentGroup,
       url,
@@ -457,6 +552,28 @@ app.post('/api/surveys/:surveyId/codes', authenticate, asyncRoute(async (req, re
     });
   }
   return res.status(201).json({ invitations });
+}));
+
+app.get('/api/surveys/:surveyId/codes/pending', authenticate, asyncRoute(async (req, res) => {
+  const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
+  if (error) return res.status(status).json({ error });
+  const grupo = validate(z.string().trim().min(1), req.query.grupo);
+  const result = await pool.query(
+    'SELECT * FROM estadistica.fn_codigos_pendientes($1, $2)',
+    [survey.id, grupo],
+  );
+  const baseUrl = process.env.PUBLIC_APP_URL.replace(/\/$/, '');
+  const rows = await Promise.all(result.rows.map(async (r) => {
+    const url = `${baseUrl}/respond/${r.token}`;
+    return {
+      id: r.id,
+      grupoEncuestado: r.grupo_encuestado,
+      url,
+      qrCode: await QRCode.toDataURL(url, { errorCorrectionLevel: 'M', margin: 1 }),
+      creadoEn: r.creado_en,
+    };
+  }));
+  return res.json(rows);
 }));
 
 app.get('/api/respond/:token', asyncRoute(async (req, res) => {
@@ -658,6 +775,65 @@ app.get('/api/surveys/:surveyId/report.pdf', authenticate, asyncRoute(async (req
   pdf.end();
 }));
 
+// ── ENCUESTADORES ─────────────────────────────────────────────────────────────
+
+app.get('/api/encuestadores', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (_req, res) => {
+  const result = await pool.query('SELECT * FROM estadistica.fn_listar_encuestadores()');
+  return res.json(result.rows);
+}));
+
+app.get('/api/surveys/:surveyId/asignaciones', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
+  const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
+  if (error) return res.status(status).json({ error });
+  const result = await pool.query(
+    'SELECT * FROM estadistica.fn_encuestadores_de_encuesta($1)',
+    [survey.id],
+  );
+  return res.json(result.rows);
+}));
+
+app.post('/api/surveys/:surveyId/asignaciones', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
+  const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
+  if (error) return res.status(status).json({ error });
+  const input = validate(z.object({
+    usuarioId: z.string().uuid(),
+    grupoEncuestado: z.string().trim().min(1),
+  }), req.body);
+  const userCheck = await pool.query(
+    'SELECT id FROM estadistica.vw_usuarios WHERE id = $1 AND role = $2',
+    [input.usuarioId, 'encuestador'],
+  );
+  if (!userCheck.rows[0]) return res.status(400).json({ error: 'El usuario no existe o no es encuestador.' });
+  const groupCheck = await pool.query(
+    'SELECT estadistica.fn_grupo_encuestado_activo($1) AS activo', [input.grupoEncuestado],
+  );
+  if (!groupCheck.rows[0]?.activo) return res.status(400).json({ error: 'El tipo de encuestado no existe.' });
+  try {
+    await pool.query(
+      'CALL estadistica.usp_asignar_encuestador($1, $2, $3)',
+      [input.usuarioId, survey.id, input.grupoEncuestado],
+    );
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Esta asignación ya existe.' });
+    throw err;
+  }
+  const updated = await pool.query(
+    'SELECT * FROM estadistica.fn_encuestadores_de_encuesta($1)', [survey.id],
+  );
+  return res.status(201).json(updated.rows);
+}));
+
+app.delete('/api/surveys/:surveyId/asignaciones/:asignacionId', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
+  const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
+  if (error) return res.status(status).json({ error });
+  await pool.query(
+    'CALL estadistica.usp_desasignar_encuestador($1)',
+    [req.params.asignacionId],
+  );
+  void survey;
+  return res.status(204).end();
+}));
+
 // ── ESTUDIOS ──────────────────────────────────────────────────────────────────
 
 app.get('/api/estudios', authenticate, asyncRoute(async (_req, res) => {
@@ -670,7 +846,14 @@ app.get('/api/grupos', authenticate, asyncRoute(async (_req, res) => {
   return res.json(result.rows);
 }));
 
-app.get('/api/grupos/con-encuesta-activa', authenticate, asyncRoute(async (_req, res) => {
+app.get('/api/grupos/con-encuesta-activa', authenticate, asyncRoute(async (req, res) => {
+  if (req.user.role === 'encuestador') {
+    const result = await pool.query(
+      'SELECT * FROM estadistica.fn_grupos_activos_encuestador($1)',
+      [req.user.sub],
+    );
+    return res.json(result.rows);
+  }
   const result = await pool.query('SELECT * FROM estadistica.fn_grupos_con_encuesta_activa()');
   return res.json(result.rows);
 }));
@@ -802,6 +985,27 @@ app.get('/api/estudios/:studyId', authenticate, asyncRoute(async (req, res) => {
   });
 }));
 
+app.get('/api/dashboard/ferias', asyncRoute(async (_req, res) => {
+  const result = await pool.query('SELECT * FROM estadistica.fn_listar_ferias_dashboard()');
+  return res.json(result.rows);
+}));
+
+app.get('/api/estudios/:studyId/dashboard', asyncRoute(async (req, res) => {
+  const resumen = await pool.query(
+    'SELECT * FROM estadistica.fn_dashboard_feria_resumen($1)',
+    [req.params.studyId],
+  );
+  if (!resumen.rows[0]) return res.status(404).json({ error: 'Estudio no encontrado.' });
+  const preguntas = await pool.query(
+    'SELECT * FROM estadistica.fn_dashboard_preguntas_feria($1)',
+    [req.params.studyId],
+  );
+  return res.json({
+    ...resumen.rows[0],
+    preguntas: preguntas.rows,
+  });
+}));
+
 io.use((socket, next) => {
   try {
     const token = socket.handshake.auth?.token;
@@ -846,6 +1050,12 @@ app.use((error, _req, res, _next) => {
   console.error('Error en la solicitud:', error);
   return res.status(500).json({ error: 'Ocurrió un error inesperado en el servidor.' });
 });
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const clientDist = path.join(__dirname, '../../client/dist/client/browser');
+app.use(express.static(clientDist));
+app.get('/{*splat}', (_req, res) => res.sendFile(path.join(clientDist, 'index.html')));
 
 server.listen(port, () => {
   console.log(`API de estadística escuchando en el puerto ${port}.`);

@@ -249,7 +249,18 @@ interface OptionDraft {
     .version { color:#64748b; font-size:.8rem; }
     .error { color:#b42318; }
     .empty-note { padding:1rem; color:#64748b; background:#f8fafc; border-radius:9px; }
-    @media(max-width:560px) { .question-form,.mode-form { grid-template-columns:1fr; } .page-head { align-items:start; flex-direction:column; } .page-head app-button { width:100%; } .save-row { align-items:end; flex-wrap:wrap; } }
+    @media(max-width:640px) {
+      .question-form,.mode-form { grid-template-columns:1fr; }
+      .page-head { align-items:flex-start; flex-direction:column; gap:.75rem; }
+      .page-head app-button { width:100%; }
+      .save-row { align-items:flex-end; flex-wrap:wrap; }
+      .panel { padding:.875rem .75rem; }
+      .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+      table { min-width:480px; }
+      h1 { font-size:1.4rem; }
+      .stat-grid { grid-template-columns:repeat(2,1fr); }
+      .section-title { flex-direction:column; align-items:flex-start; gap:.5rem; }
+    }
   `],
 })
 export class SurveyDetailComponent implements OnInit, OnDestroy {

@@ -14,6 +14,31 @@ interface Grupo {
   creado_en: string;
 }
 
+interface Encuestador {
+  id: string;
+  email: string;
+  nombre_display: string;
+}
+
+interface Asignacion {
+  asignacion_id: string;
+  usuario_id: string;
+  nombre: string;
+  email: string;
+  grupo_encuestado: string;
+}
+
+interface Survey {
+  id: string;
+  titulo: string;
+  estado: string;
+}
+
+interface RespondentGroup {
+  nombre: string;
+  etiqueta: string;
+}
+
 @Component({
   selector: 'app-admin',
   standalone: true,
@@ -118,6 +143,16 @@ interface Grupo {
 
     /* ── Delete modal icon ── */
     .delete-icon { display:grid; place-items:center; width:3.5rem; height:3.5rem; border-radius:14px; background:#fef2f2; margin:0 auto 1rem; }
+
+    @media(max-width:640px) {
+      .page-head { flex-direction:column; align-items:flex-start; gap:.75rem; }
+      .page-head app-button, .page-head button { width:100%; }
+      .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+      table { min-width:520px; }
+      .panel { padding:.875rem .75rem; }
+      h1 { font-size:1.4rem; }
+      .modal-card { padding:1.25rem; }
+    }
   `],
   template: `
     <header class="page-head">
@@ -214,6 +249,95 @@ interface Grupo {
         </div>
       }
 
+    }
+
+    <!-- TAB: Asignaciones encuestadores -->
+    @if (activeTab === 'asignaciones') {
+      <div class="toolbar">
+        <div class="toolbar-meta">
+          <h2>Asignaciones de encuestadores</h2>
+          <small>Asigna encuestadores a encuestas y grupos específicos.</small>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:1rem">
+        <div class="form-group" style="max-width:420px">
+          <label class="form-label">Selecciona una encuesta</label>
+          <select class="form-input" [(ngModel)]="selectedSurveyId" (ngModelChange)="onSurveyChange()">
+            <option value="">— Elige una encuesta —</option>
+            @for (s of surveys; track s.id) {
+              <option [value]="s.id">{{ s.titulo }} ({{ s.estado }})</option>
+            }
+          </select>
+        </div>
+      </div>
+
+      @if (selectedSurveyId) {
+        <div class="toolbar" style="margin-bottom:.75rem">
+          <h3 style="margin:0;font-size:1rem;font-weight:700;color:#0f172a">Encuestadores asignados</h3>
+          <button class="btn-primary" (click)="showAsignForm = !showAsignForm">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+            Nueva asignación
+          </button>
+        </div>
+
+        @if (showAsignForm) {
+          <div class="panel" style="margin-bottom:1rem">
+            <div class="form-row" style="align-items:end;gap:.75rem;margin-bottom:.75rem">
+              <div class="form-group">
+                <label class="form-label">Encuestador</label>
+                <select class="form-input" [(ngModel)]="asignForm.usuarioId">
+                  <option value="">— Selecciona —</option>
+                  @for (e of encuestadores; track e.id) {
+                    <option [value]="e.id">{{ e.nombre_display }} ({{ e.email }})</option>
+                  }
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Tipo de encuestado</label>
+                <select class="form-input" [(ngModel)]="asignForm.grupoEncuestado">
+                  <option value="">— Selecciona —</option>
+                  @for (g of respondentGroups; track g.nombre) {
+                    <option [value]="g.nombre">{{ g.etiqueta }}</option>
+                  }
+                </select>
+              </div>
+            </div>
+            @if (asignFormError) { <p class="form-error">{{ asignFormError }}</p> }
+            <div style="display:flex;gap:.5rem">
+              <button class="btn-submit" style="flex:0 0 auto;padding:.5rem 1.25rem" (click)="addAsignacion()" [disabled]="asignBusy || !asignForm.usuarioId || !asignForm.grupoEncuestado">
+                {{ asignBusy ? 'Asignando…' : 'Asignar' }}
+              </button>
+              <button class="btn-cancel" style="flex:0 0 auto;padding:.5rem 1rem" (click)="showAsignForm = false">Cancelar</button>
+            </div>
+          </div>
+        }
+
+        @if (asignError) { <div class="error-banner" role="alert">{{ asignError }}</div> }
+
+        @if (asignLoading) {
+          <div class="loading"><div class="spinner"></div><p>Cargando…</p></div>
+        } @else {
+          <div class="table-card">
+            <table>
+              <thead><tr><th>Encuestador</th><th>Correo</th><th>Tipo de encuestado</th><th style="text-align:right">Acciones</th></tr></thead>
+              <tbody>
+                @if (asignaciones.length === 0) {
+                  <tr class="empty-row"><td colspan="4">Sin asignaciones para esta encuesta.</td></tr>
+                }
+                @for (a of asignaciones; track a.asignacion_id) {
+                  <tr>
+                    <td><strong>{{ a.nombre }}</strong></td>
+                    <td>{{ a.email }}</td>
+                    <td>{{ a.grupo_encuestado }}</td>
+                    <td class="actions"><button class="btn-danger-outline" (click)="removeAsignacion(a.asignacion_id)">Quitar</button></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
     }
 
     <!-- MODAL crear / editar -->
@@ -318,7 +442,7 @@ interface Grupo {
 })
 export class AdminComponent implements OnInit {
   activeTab = 'grupos';
-  tabs = [{ id: 'grupos', label: '📋  Grupos' }];
+  tabs = [{ id: 'grupos', label: '📋  Grupos' }, { id: 'asignaciones', label: '👤  Encuestadores' }];
 
   grupos: Grupo[] = [];
   loading = true;
@@ -332,13 +456,31 @@ export class AdminComponent implements OnInit {
 
   deleteTarget: Grupo | null = null;
 
+  // ── Asignaciones ─────────────────────────────────────────────────────────
+  encuestadores: Encuestador[] = [];
+  surveys: Survey[] = [];
+  respondentGroups: RespondentGroup[] = [];
+  selectedSurveyId = '';
+  asignaciones: Asignacion[] = [];
+  asignLoading = false;
+  asignError = '';
+  showAsignForm = false;
+  asignForm = { usuarioId: '', grupoEncuestado: '' };
+  asignBusy = false;
+  asignFormError = '';
+
   constructor(
     private readonly http: HttpClient,
     private readonly cdr: ChangeDetectorRef,
   ) {}
 
   async ngOnInit(): Promise<void> {
-    await this.loadGrupos();
+    await Promise.all([
+      this.loadGrupos(),
+      this.loadEncuestadores(),
+      this.loadSurveys(),
+      this.loadRespondentGroups(),
+    ]);
   }
 
   async loadGrupos(): Promise<void> {
@@ -399,6 +541,73 @@ export class AdminComponent implements OnInit {
       this.formError = msg ?? 'Error al guardar. Verificá los datos.';
     } finally {
       this.busy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async loadEncuestadores(): Promise<void> {
+    try {
+      this.encuestadores = await firstValueFrom(this.http.get<Encuestador[]>('/api/encuestadores'));
+    } catch { /* silencioso */ }
+  }
+
+  async loadSurveys(): Promise<void> {
+    try {
+      this.surveys = await firstValueFrom(this.http.get<Survey[]>('/api/surveys'));
+    } catch { /* silencioso */ }
+  }
+
+  async loadRespondentGroups(): Promise<void> {
+    try {
+      this.respondentGroups = await firstValueFrom(this.http.get<RespondentGroup[]>('/api/respondent-groups'));
+    } catch { /* silencioso */ }
+  }
+
+  async onSurveyChange(): Promise<void> {
+    if (!this.selectedSurveyId) { this.asignaciones = []; return; }
+    this.asignLoading = true;
+    this.asignError = '';
+    try {
+      this.asignaciones = await firstValueFrom(
+        this.http.get<Asignacion[]>(`/api/surveys/${this.selectedSurveyId}/asignaciones`),
+      );
+    } catch {
+      this.asignError = 'No se pudieron cargar las asignaciones.';
+    } finally {
+      this.asignLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async addAsignacion(): Promise<void> {
+    if (!this.asignForm.usuarioId || !this.asignForm.grupoEncuestado) return;
+    this.asignBusy = true;
+    this.asignFormError = '';
+    try {
+      this.asignaciones = await firstValueFrom(
+        this.http.post<Asignacion[]>(`/api/surveys/${this.selectedSurveyId}/asignaciones`, {
+          usuarioId: this.asignForm.usuarioId,
+          grupoEncuestado: this.asignForm.grupoEncuestado,
+        }),
+      );
+      this.asignForm = { usuarioId: '', grupoEncuestado: '' };
+      this.showAsignForm = false;
+    } catch (err: unknown) {
+      const msg = (err as { error?: { error?: string } })?.error?.error;
+      this.asignFormError = msg ?? 'Error al asignar.';
+    } finally {
+      this.asignBusy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async removeAsignacion(id: string): Promise<void> {
+    try {
+      await firstValueFrom(this.http.delete(`/api/surveys/${this.selectedSurveyId}/asignaciones/${id}`));
+      this.asignaciones = this.asignaciones.filter((a) => a.asignacion_id !== id);
+      this.cdr.markForCheck();
+    } catch {
+      this.asignError = 'No se pudo eliminar la asignación.';
       this.cdr.markForCheck();
     }
   }

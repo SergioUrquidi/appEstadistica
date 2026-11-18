@@ -12,22 +12,36 @@ import { ButtonComponent } from './shared/button.component';
   imports: [RouterOutlet, RouterLink, RouterLinkActive, ButtonComponent],
   template: `
     @if (auth.user(); as user) {
-      <aside class="sidebar">
-        <a class="sidebar-brand" routerLink="/estudios">
+      <!-- Top bar (mobile only) -->
+      <header class="topbar">
+        <button class="topbar-menu" (click)="menuOpen = !menuOpen" [attr.aria-expanded]="menuOpen" aria-label="Menú">
+          <span class="ham" [class.ham--open]="menuOpen"></span>
+        </button>
+        <a class="topbar-brand" routerLink="/estudios">
+          <span class="brand-mark">Σ</span>
+          <span class="brand-text">Estadística</span>
+        </a>
+        <div class="topbar-avatar">{{ user.display_name[0] }}</div>
+      </header>
+
+      <!-- Overlay backdrop -->
+      @if (menuOpen) {
+        <div class="drawer-backdrop" (click)="menuOpen = false"></div>
+      }
+
+      <aside class="sidebar" [class.sidebar--open]="menuOpen">
+        <a class="sidebar-brand" routerLink="/estudios" (click)="menuOpen = false">
           <span class="brand-mark">Σ</span>
           <span class="brand-text">Estadística<small>Encuestas y análisis</small></span>
         </a>
         <nav class="sidebar-nav">
-          <a routerLink="/estudios" routerLinkActive="active-link">
-            <span class="nav-icon">⬡</span><span class="nav-label">Ferias</span>
-          </a>
           <div class="nav-group">
-            <a routerLink="/generador-qr" routerLinkActive="active-link">
+            <a routerLink="/generador-qr" routerLinkActive="active-link" (click)="menuOpen = false">
               <span class="nav-icon">▦</span><span class="nav-label">Generador QR</span>
             </a>
             <div class="nav-submenu">
               @for (group of groups; track group.id) {
-                <a class="nav-submenu-link" [routerLink]="['/generador-qr', group.id]" routerLinkActive="active-link">
+                <a class="nav-submenu-link" [routerLink]="['/generador-qr', group.id]" routerLinkActive="active-link" (click)="menuOpen = false">
                   <span class="nav-submenu-icon" aria-hidden="true">{{ group.icono }}</span><span>{{ group.etiqueta }}</span>
                 </a>
               }
@@ -35,11 +49,19 @@ import { ButtonComponent } from './shared/button.component';
             </div>
           </div>
 
+          <a routerLink="/dashboard" routerLinkActive="active-link" (click)="menuOpen = false">
+            <span class="nav-icon">📊</span><span class="nav-label">Dashboard</span>
+          </a>
+          @if (user.role !== 'encuestador') {
+            <a routerLink="/estudios" routerLinkActive="active-link" (click)="menuOpen = false">
+              <span class="nav-icon">⬡</span><span class="nav-label">Ferias</span>
+            </a>
+          }
           @if (user.role === 'admin' || user.role === 'superuser') {
-            <a routerLink="/usuarios" routerLinkActive="active-link">
+            <a routerLink="/usuarios" routerLinkActive="active-link" (click)="menuOpen = false">
               <span class="nav-icon">⊹</span><span class="nav-label">Usuarios</span>
             </a>
-            <a routerLink="/admin" routerLinkActive="active-link">
+            <a routerLink="/admin" routerLinkActive="active-link" (click)="menuOpen = false">
               <span class="nav-icon">⚙</span><span class="nav-label">Admin</span>
             </a>
           }
@@ -56,6 +78,13 @@ import { ButtonComponent } from './shared/button.component';
       </div>
     } @else {
       <div class="app-body app-body--full">
+        <header class="topbar-public">
+          <a class="topbar-brand" routerLink="/dashboard">
+            <span class="brand-mark">Σ</span>
+            <span class="brand-text">Estadística</span>
+          </a>
+          <a class="topbar-dashboard-link" routerLink="/dashboard" routerLinkActive="active-link">Dashboard</a>
+        </header>
         <main><router-outlet /></main>
       </div>
     }
@@ -65,6 +94,7 @@ import { ButtonComponent } from './shared/button.component';
 export class App implements OnInit {
   groups: Group[] = [];
   groupsError = '';
+  menuOpen = false;
   private groupsUserId: string | null = null;
 
   constructor(
@@ -108,6 +138,12 @@ export class App implements OnInit {
   }
 
   roleLabel(role: string): string {
-    return role === 'superuser' ? 'Superusuario' : role === 'admin' ? 'Administrador' : 'Usuario';
+    const labels: Record<string, string> = {
+      superuser: 'Superusuario',
+      admin: 'Administrador',
+      user: 'Usuario',
+      encuestador: 'Encuestador',
+    };
+    return labels[role] ?? role;
   }
 }

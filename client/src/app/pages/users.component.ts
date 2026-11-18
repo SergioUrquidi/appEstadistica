@@ -10,7 +10,7 @@ interface ManagedUser {
   id: string;
   email: string;
   display_name: string;
-  role: 'superuser' | 'admin' | 'user';
+  role: 'superuser' | 'admin' | 'user' | 'encuestador';
   created_at: string;
 }
 
@@ -38,11 +38,16 @@ interface ManagedUser {
         <label>Contraseña temporal (mínimo 12 caracteres)
           <input name="password" type="password" [(ngModel)]="password" minlength="12" required>
         </label>
-        @if (auth.user()?.role === 'superuser') {
-          <label>Rol
-            <select name="role" [(ngModel)]="role"><option value="user">Usuario</option><option value="admin">Administrador</option><option value="superuser">Superusuario</option></select>
-          </label>
-        }
+        <label>Rol
+          <select name="role" [(ngModel)]="role">
+            <option value="user">Usuario</option>
+            <option value="encuestador">Encuestador</option>
+            @if (auth.user()?.role === 'superuser') {
+              <option value="admin">Administrador</option>
+              <option value="superuser">Superusuario</option>
+            }
+          </select>
+        </label>
         @if (error) { <p class="error" role="alert">{{ error }}</p> }
         @if (success) { <p class="success" role="status">{{ success }}</p> }
         <app-button type="submit" [disabled]="busy">{{ busy ? 'Creando…' : 'Crear usuario' }}</app-button>
@@ -77,7 +82,13 @@ interface ManagedUser {
     tbody tr:hover td { background:#f8faff; }
     .error { color:#b42318; grid-column:1/-1; }
     .success { color:#166534; grid-column:1/-1; }
-    @media(max-width:650px) { form { grid-template-columns:1fr; } }
+    @media(max-width:650px) {
+      form { grid-template-columns:1fr; }
+      .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+      table { min-width:480px; }
+      .panel { padding:.875rem .75rem; }
+      h1 { font-size:1.4rem; }
+    }
   `],
 })
 export class UsersComponent implements OnInit {
@@ -136,6 +147,12 @@ export class UsersComponent implements OnInit {
   }
 
   roleLabel(role: ManagedUser['role']): string {
-    return role === 'superuser' ? 'Superusuario' : role === 'admin' ? 'Administrador' : 'Usuario';
+    const labels: Record<ManagedUser['role'], string> = {
+      superuser: 'Superusuario',
+      admin: 'Administrador',
+      user: 'Usuario',
+      encuestador: 'Encuestador',
+    };
+    return labels[role] ?? role;
   }
 }

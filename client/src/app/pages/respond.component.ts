@@ -128,6 +128,9 @@ interface PublicSurvey {
     .score { margin:.3rem 0; color:#185adb; font-size:2rem; font-weight:800; }
     .result-question { display:grid; gap:.35rem; margin-top:.8rem; padding:.75rem; border-radius:9px; background:#f8fafc; }
     .result-question small,.muted { color:#64748b; }
+    @media(max-width:640px) {
+      .response-card { margin:0; border-radius:0; border-left:0; border-right:0; min-height:100vh; }
+    }
   `],
 })
 export class RespondComponent implements OnInit {
@@ -181,6 +184,19 @@ export class RespondComponent implements OnInit {
     if (!this.survey || this.survey.questions.some((question) => !this.hasAnswer(question))) {
       this.error = 'Responde todas las preguntas antes de enviar.';
       return;
+    }
+    for (const q of this.survey.questions) {
+      if (!q.is_numeric) continue;
+      const val = this.answers[q.id];
+      if (typeof val !== 'number') continue;
+      if (q.min_value !== null && val < q.min_value) {
+        this.error = `"${q.prompt}": el valor mínimo permitido es ${q.min_value}.`;
+        return;
+      }
+      if (q.max_value !== null && val > q.max_value) {
+        this.error = `"${q.prompt}": el valor máximo permitido es ${q.max_value}.`;
+        return;
+      }
     }
     this.busy = true;
     this.error = '';
