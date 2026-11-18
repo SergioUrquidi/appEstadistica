@@ -329,7 +329,7 @@ export class QrGeneratorComponent implements OnInit, OnDestroy {
 
     try {
       [this.groups, this.respondentGroups] = await Promise.all([
-        firstValueFrom(this.http.get<Group[]>('/api/grupos')),
+        firstValueFrom(this.http.get<Group[]>('/api/grupos/con-encuesta-activa')),
         firstValueFrom(this.http.get<RespondentGroup[]>('/api/respondent-groups/con-encuesta-activa')),
       ]);
       this.groupsLoaded = true;
