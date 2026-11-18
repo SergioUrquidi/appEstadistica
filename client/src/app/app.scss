@@ -310,6 +310,19 @@ $topbar-h: 56px;
   &.active-link { background: #8dcab8; color: #333333; }
 }
 
+.topbar-login-btn {
+  margin-left: auto;
+  color: #0d2b24;
+  background: #8dcab8;
+  font-size: .82rem;
+  font-weight: 700;
+  text-decoration: none;
+  padding: .35rem .9rem;
+  border-radius: 8px;
+  transition: background .15s;
+  &:hover { background: #6baa96; }
+}
+
 main {
   flex: 1;
   min-width: 0;

@@ -35,24 +35,27 @@ import { ButtonComponent } from './shared/button.component';
           <span class="brand-text">Estadística<small>Encuestas y análisis</small></span>
         </a>
         <nav class="sidebar-nav">
-          <div class="nav-group">
-            <a routerLink="/generador-qr" routerLinkActive="active-link" (click)="menuOpen = false">
-              <span class="nav-icon">▦</span><span class="nav-label">Generador QR</span>
-            </a>
-            <div class="nav-submenu">
-              @for (group of groups; track group.id) {
-                <a class="nav-submenu-link" [routerLink]="['/generador-qr', group.id]" routerLinkActive="active-link" (click)="menuOpen = false">
-                  <span class="nav-submenu-icon" aria-hidden="true">{{ group.icono }}</span><span>{{ group.etiqueta }}</span>
-                </a>
-              }
-              @if (groupsError) { <span class="nav-error" role="alert">{{ groupsError }}</span> }
-            </div>
-          </div>
-
           <a routerLink="/dashboard" routerLinkActive="active-link" (click)="menuOpen = false">
             <span class="nav-icon">📊</span><span class="nav-label">Dashboard</span>
           </a>
-          @if (user.role !== 'encuestador') {
+
+          @if (user.role === 'encuestador' || user.role === 'admin' || user.role === 'superuser') {
+            <div class="nav-group">
+              <a routerLink="/generador-qr" routerLinkActive="active-link" (click)="menuOpen = false">
+                <span class="nav-icon">▦</span><span class="nav-label">Generador QR</span>
+              </a>
+              <div class="nav-submenu">
+                @for (group of groups; track group.id) {
+                  <a class="nav-submenu-link" [routerLink]="['/generador-qr', group.id]" routerLinkActive="active-link" (click)="menuOpen = false">
+                    <span class="nav-submenu-icon" aria-hidden="true">{{ group.icono }}</span><span>{{ group.etiqueta }}</span>
+                  </a>
+                }
+                @if (groupsError) { <span class="nav-error" role="alert">{{ groupsError }}</span> }
+              </div>
+            </div>
+          }
+
+          @if (user.role === 'admin' || user.role === 'superuser') {
             <a routerLink="/estudios" routerLinkActive="active-link" (click)="menuOpen = false">
               <span class="nav-icon">⬡</span><span class="nav-label">Ferias</span>
             </a>
@@ -83,7 +86,7 @@ import { ButtonComponent } from './shared/button.component';
             <span class="brand-mark">Σ</span>
             <span class="brand-text">Estadística</span>
           </a>
-          <a class="topbar-dashboard-link" routerLink="/dashboard" routerLinkActive="active-link">Dashboard</a>
+          <a class="topbar-login-btn" routerLink="/iniciar-sesion">Ingresar</a>
         </header>
         <main><router-outlet /></main>
       </div>
