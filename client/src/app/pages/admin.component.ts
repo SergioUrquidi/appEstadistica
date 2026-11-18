@@ -47,7 +47,7 @@ interface RespondentGroup {
     .page-head { margin:1.5rem 0 2rem; }
     h1 { margin:.25rem 0; font-size:clamp(1.5rem,4vw,2rem); }
     h2 { margin:.2rem 0 .4rem; font-size:1.15rem; }
-    h3 { margin:0 0 .2rem; font-size:1.05rem; font-weight:700; color:#0f172a; }
+    h3 { margin:0 0 .2rem; font-size:1.05rem; font-weight:700; color:#0d2b24; }
     .eyebrow { color:#8dcab8; font-size:.75rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
     .muted { color:#64748b; font-size:.88rem; }
     .panel { margin:1rem 0; padding:1.25rem; border:1px solid #e2e8f0; border-radius:14px; background:white; }
@@ -62,7 +62,7 @@ interface RespondentGroup {
     .toolbar-meta small { display:block; color:#94a3b8; font-size:.78rem; margin-top:.15rem; }
 
     /* ── Btn primario / peligro ── */
-    .btn-primary { display:inline-flex; align-items:center; gap:.45rem; padding:.5rem 1rem; background:var(--color-action); color:#fff; border:0; border-radius:8px; font:inherit; font-size:.875rem; font-weight:700; cursor:pointer; transition:background .15s; }
+    .btn-primary { display:inline-flex; align-items:center; gap:.45rem; padding:.5rem 1rem; background:var(--color-action); color:#333333; border:0; border-radius:8px; font:inherit; font-size:.875rem; font-weight:700; cursor:pointer; transition:background .15s; }
     .btn-primary:hover { background:var(--color-action-hover); }
     .btn-danger-outline { padding:.4rem .75rem; background:transparent; border:1px solid var(--color-danger); border-radius:8px; color:var(--color-danger); font:inherit; font-size:.8rem; font-weight:700; cursor:pointer; transition:background .15s, border-color .15s; }
     .btn-danger-outline:hover { background:#fef2f2; }
@@ -74,7 +74,7 @@ interface RespondentGroup {
 
     /* ── Loading ── */
     .loading { text-align:center; padding:4rem 1rem; color:#94a3b8; font-size:.9rem; }
-    .spinner { display:inline-block; width:1.5rem; height:1.5rem; border:2px solid #bfdbfe; border-top-color:#3b82f6; border-radius:50%; animation:spin .6s linear infinite; margin-bottom:.6rem; }
+    .spinner { display:inline-block; width:1.5rem; height:1.5rem; border:2px solid var(--color-action-soft); border-top-color:var(--color-action); border-radius:50%; animation:spin .6s linear infinite; margin-bottom:.6rem; }
     @keyframes spin { to { transform:rotate(360deg); } }
 
     /* ── Table ── */
@@ -274,7 +274,7 @@ interface RespondentGroup {
 
       @if (selectedSurveyId) {
         <div class="toolbar" style="margin-bottom:.75rem">
-          <h3 style="margin:0;font-size:1rem;font-weight:700;color:#0f172a">Encuestadores asignados</h3>
+          <h3 style="margin:0;font-size:1rem;font-weight:700;color:#0d2b24">Encuestadores asignados</h3>
           <button class="btn-primary" (click)="showAsignForm = !showAsignForm">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
             Nueva asignación

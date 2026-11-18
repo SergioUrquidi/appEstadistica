@@ -151,7 +151,7 @@ import { ButtonComponent } from '../shared/button.component';
     }
     .study-card:hover { box-shadow:0 4px 20px rgba(0,0,0,.08); border-color:#94a3b8; }
     .study-card-top { display:flex; gap:.5rem; margin-bottom:.75rem; flex-wrap:wrap; }
-    .study-card h3 { margin:0 0 .4rem; font-size:1rem; color:#0f172a; }
+    .study-card h3 { margin:0 0 .4rem; font-size:1rem; color:#0d2b24; }
     .study-date { margin:0 0 .75rem; color:#64748b; font-size:.8rem; }
     .study-meta { color:#64748b; font-size:.8rem; }
 
@@ -159,8 +159,8 @@ import { ButtonComponent } from '../shared/button.component';
       display:inline-block; padding:.25rem .65rem; border-radius:99px;
       font-size:.7rem; font-weight:700; letter-spacing:.04em;
     }
-    .shift-badge { background:#eff6ff; color:#1d4ed8; }
-    .shift-badge.shift-noche { background:#1e1b4b; color:#a5b4fc; }
+    .shift-badge { background:var(--color-action-soft); color:var(--color-action-text); }
+    .shift-badge.shift-noche { background:#0d2b24; color:#8dcab8; }
     .status-badge { background:#f1f5f9; color:#475569; }
     .status-badge.status-activo { background:#dcfce7; color:#166534; }
     .status-badge.status-cerrado { background:#f1f5f9; color:#94a3b8; }

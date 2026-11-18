@@ -33,7 +33,7 @@ import { StudyDetail, StudySurvey } from '../core/models';
           <small class="live-dot">● en vivo</small>
         </div>
         <a class="btn-dashboard" [routerLink]="['/estudios', study.id, 'dashboard']">
-          📊 Ver dashboard
+          Ver dashboard →
         </a>
       </header>
 
@@ -113,21 +113,21 @@ import { StudyDetail, StudySurvey } from '../core/models';
       display:inline-block; padding:.25rem .65rem; border-radius:99px;
       font-size:.7rem; font-weight:700; letter-spacing:.04em;
     }
-    .shift-badge { background:#eff6ff; color:#1d4ed8; }
-    .shift-badge.shift-noche { background:#1e1b4b; color:#a5b4fc; }
+    .shift-badge { background:var(--color-action-soft); color:var(--color-action-text); }
+    .shift-badge.shift-noche { background:#0d2b24; color:#8dcab8; }
     .status-badge { background:#f1f5f9; color:#475569; }
     .status-badge.status-activo { background:#dcfce7; color:#166534; }
 
     .btn-dashboard {
       display:inline-flex; align-items:center; gap:.4rem; padding:.65rem 1.1rem;
-      background:var(--color-action); color:#fff; border-radius:10px; font-size:.85rem; font-weight:700;
+      background:var(--color-action); color:#333333; border-radius:10px; font-size:.85rem; font-weight:700;
       text-decoration:none; transition:background .15s; white-space:nowrap; align-self:flex-start;
     }
     .btn-dashboard:hover { background:var(--color-action-hover); }
 
     .total-badge {
       display:flex; flex-direction:column; align-items:center; justify-content:center;
-      background:#0f172a; color:#fff; border-radius:16px; padding:1rem 1.5rem; min-width:120px;
+      background:#0d2b24; color:#fff; border-radius:16px; padding:1rem 1.5rem; min-width:120px;
     }
     .total-badge strong { font-size:2.5rem; line-height:1; }
     .total-badge span { font-size:.75rem; color:#94a3b8; margin-top:.2rem; }
@@ -143,7 +143,7 @@ import { StudyDetail, StudySurvey } from '../core/models';
     }
     .group-card:hover { box-shadow:0 4px 16px rgba(0,0,0,.08); }
     .group-icon { font-size:1.75rem; line-height:1; }
-    .group-info h2 { margin:0 0 .4rem; font-size:1rem; color:#0f172a; }
+    .group-info h2 { margin:0 0 .4rem; font-size:1rem; color:#0d2b24; }
     .response-count { font-size:2.8rem; font-weight:800; color:#8dcab8; line-height:1; }
     .count-label { margin:0; color:#64748b; font-size:.78rem; }
 
@@ -153,7 +153,7 @@ import { StudyDetail, StudySurvey } from '../core/models';
     .survey-mode { color:#64748b; font-size:.7rem; }
     .btn-survey {
       font-size:.78rem; font-weight:700; color:var(--color-action); text-decoration:none;
-      padding:.35rem .75rem; border:1px solid #bfdbfe; border-radius:8px;
+      padding:.35rem .75rem; border:1px solid #a8d9c8; border-radius:8px;
       transition:background .15s;
     }
     .btn-survey:hover { background:var(--color-action-soft); }

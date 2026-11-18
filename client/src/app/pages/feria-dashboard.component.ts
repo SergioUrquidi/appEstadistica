@@ -379,8 +379,8 @@ interface DashboardData {
     .ferias-tabs { display:flex; gap:.4rem; overflow-x:auto; padding:.75rem 0 .9rem; margin-bottom:1.25rem; border-bottom:2px solid #e2e8f0; scrollbar-width:none; }
     .ferias-tabs::-webkit-scrollbar { display:none; }
     .tab-btn { display:flex; flex-direction:column; align-items:flex-start; gap:.1rem; padding:.45rem .9rem; border:1px solid #e2e8f0; border-radius:10px; background:#f8fafc; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s; }
-    .tab-btn:hover { background:#eff6ff; border-color:#93c5fd; }
-    .tab-btn.tab-active { background:#0f172a; border-color:#0f172a; }
+    .tab-btn:hover { background:var(--color-action-soft); border-color:var(--color-action); }
+    .tab-btn.tab-active { background:#0d2b24; border-color:#0d2b24; }
     .tab-titulo { font-size:.8rem; font-weight:700; color:#334155; }
     .tab-btn.tab-active .tab-titulo { color:#fff; }
     .tab-meta { font-size:.65rem; color:#94a3b8; text-transform:capitalize; }
@@ -391,16 +391,16 @@ interface DashboardData {
     h1 { margin:.25rem 0 .5rem; font-size:clamp(1.4rem,4vw,2rem); }
     .head-meta { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-top:.4rem; }
     .meta-date { color:#64748b; font-size:.82rem; }
-    .shift-badge { display:inline-block; padding:.25rem .65rem; border-radius:99px; font-size:.7rem; font-weight:700; background:#eff6ff; color:#1d4ed8; }
-    .shift-badge.shift-noche { background:#1e1b4b; color:#a5b4fc; }
+    .shift-badge { display:inline-block; padding:.25rem .65rem; border-radius:99px; font-size:.7rem; font-weight:700; background:var(--color-action-soft); color:var(--color-action-text); }
+    .shift-badge.shift-noche { background:#0d2b24; color:#8dcab8; }
 
     .kpi-row { display:flex; gap:1rem; flex-wrap:wrap; }
-    .kpi { display:flex; flex-direction:column; align-items:center; background:#0f172a; color:#fff; border-radius:14px; padding:.9rem 1.4rem; min-width:100px; }
+    .kpi { display:flex; flex-direction:column; align-items:center; background:#0d2b24; color:#fff; border-radius:14px; padding:.9rem 1.4rem; min-width:100px; }
     .kpi strong { font-size:2rem; line-height:1; }
     .kpi span { font-size:.7rem; color:#94a3b8; margin-top:.2rem; }
 
     .panel { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:1.4rem; margin-bottom:1.25rem; }
-    .chart-panel h2, .pregunta-panel h2 { margin:0 0 1rem; font-size:1rem; color:#0f172a; }
+    .chart-panel h2, .pregunta-panel h2 { margin:0 0 1rem; font-size:1rem; color:#0d2b24; }
 
     .pie-wrap { max-width:280px; margin:0 auto 1rem; }
     .grupo-legend { display:flex; flex-wrap:wrap; gap:.5rem; justify-content:center; }
@@ -417,21 +417,21 @@ interface DashboardData {
     .stats-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:.6rem; margin-bottom:.5rem; }
     .stat-tile { background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:.7rem .85rem; display:flex; flex-direction:column; gap:.15rem; }
     .stat-tile.sesgo-pos { border-color:#fbbf24; background:#fffbeb; }
-    .stat-tile.sesgo-neg { border-color:#818cf8; background:#eef2ff; }
+    .stat-tile.sesgo-neg { border-color:var(--color-accent); background:#fdf8ed; }
     .stat-tile.kurt-lepto { border-color:#34d399; background:#ecfdf5; }
     .stat-tile.kurt-plati { border-color:#f87171; background:#fff1f2; }
-    .stat-tile.highlight-blue { border-color:#93c5fd; background:#eff6ff; }
-    .stat-tile.highlight-purple { border-color:#c4b5fd; background:#f5f3ff; }
+    .stat-tile.highlight-blue { border-color:var(--color-action); background:var(--color-action-soft); }
+    .stat-tile.highlight-purple { border-color:var(--color-accent); background:#fdf8ed; }
     .stat-tile.highlight-green { border-color:#86efac; background:#f0fdf4; }
     .stat-label { font-size:.65rem; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
-    .stat-tile strong { font-size:1.05rem; color:#0f172a; font-weight:700; }
+    .stat-tile strong { font-size:1.05rem; color:#0d2b24; font-weight:700; }
     .stat-tile small { font-size:.67rem; color:#94a3b8; }
 
     .dist-label { display:inline-block; padding:.35rem .85rem; border-radius:99px; font-size:.75rem; font-weight:700; margin:.4rem 0 .8rem; background:#f1f5f9; color:#475569; }
     .dist-label.unimodal { background:#dcfce7; color:#166534; }
-    .dist-label.bimodal { background:#ede9fe; color:#5b21b6; }
+    .dist-label.bimodal { background:var(--color-action-soft); color:var(--color-action-text); }
     .dist-label.sesgo-derecha { background:#fef3c7; color:#92400e; }
-    .dist-label.sesgo-izquierda { background:#dbeafe; color:#1e40af; }
+    .dist-label.sesgo-izquierda { background:#fdf8ed; color:#92670a; }
 
     .ic-bar { background:#f0fdf4; border:1px solid #86efac; border-radius:9px; padding:.6rem 1rem; font-size:.82rem; font-weight:600; color:#166534; display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:.4rem; margin-top:.3rem; margin-bottom:.5rem; }
     .ic-bar small { color:#4ade80; font-weight:400; font-size:.75rem; }
@@ -439,12 +439,12 @@ interface DashboardData {
     /* Tabla de frecuencias */
     .table-wrap { overflow-x:auto; margin-bottom:.75rem; }
     .freq-table { width:100%; border-collapse:collapse; font-size:.82rem; }
-    .freq-table th { background:#0f172a; color:#94a3b8; font-size:.67rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:.5rem .75rem; text-align:right; white-space:nowrap; }
+    .freq-table th { background:#0d2b24; color:#8abfb5; font-size:.67rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:.5rem .75rem; text-align:right; white-space:nowrap; }
     .freq-table th:first-child { text-align:left; }
     .freq-table td { padding:.45rem .75rem; border-bottom:1px solid #f1f5f9; color:#334155; text-align:right; }
     .freq-table td:first-child { text-align:left; font-weight:600; }
     .freq-table tbody tr:hover td { background:#f8fafc; }
-    .freq-table .totals-row td { background:#f1f5f9; color:#0f172a; border-top:2px solid #e2e8f0; }
+    .freq-table .totals-row td { background:#f1f5f9; color:#0d2b24; border-top:2px solid #e2e8f0; }
 
     /* Gráficos */
     .chart-title { font-size:.72rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:.08em; margin:.9rem 0 .4rem; }
@@ -474,8 +474,8 @@ export class FeriaDashboardComponent implements OnInit, AfterViewInit, OnDestroy
   private chartsCreated = false;
 
   readonly GRUPO_COLORS = [
-    '#8dcab8', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6',
-    '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#6366f1',
+    '#8dcab8', '#22c55e', '#f59e0b', '#ef4444', '#d4b46a',
+    '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#2d7d6a',
   ];
 
   async ngOnInit(): Promise<void> {

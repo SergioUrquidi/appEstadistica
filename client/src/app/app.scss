@@ -251,7 +251,19 @@ $topbar-h: 56px;
   small { color: #5a8a7e; font-size: .68rem; }
 }
 
-.logout-btn { margin-left: auto; }
+.logout-btn {
+  margin-left: auto;
+  :deep(.action-button) {
+    background: #183d30;
+    color: #8abfb5;
+    border-color: #2a5a46;
+    &:hover:not(:disabled) {
+      background: #1f4c3c;
+      color: #c8ece4;
+      border-color: #3a7a60;
+    }
+  }
+}
 
 /* ── Main content area ──────────────────────────────────────── */
 .app-body {
