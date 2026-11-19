@@ -88,15 +88,30 @@ import { ButtonComponent } from '../shared/button.component';
       </section>
     }
 
-    @if (studies.length === 0 && !loading) {
+    @if (!loading) {
+      <nav class="tab-nav" role="tablist">
+        <button role="tab" class="tab-btn" [class.tab-active]="activeTab === 'activo'" (click)="activeTab = 'activo'" [attr.aria-selected]="activeTab === 'activo'">
+          Activas <span class="tab-count">{{ activeStudies.length }}</span>
+        </button>
+        <button role="tab" class="tab-btn" [class.tab-active]="activeTab === 'cerrado'" (click)="activeTab = 'cerrado'" [attr.aria-selected]="activeTab === 'cerrado'">
+          Cerradas <span class="tab-count">{{ closedStudies.length }}</span>
+        </button>
+      </nav>
+    }
+
+    @if (visibleStudies.length === 0 && !loading) {
       <div class="empty-state">
-        <p>No hay ferias registradas aún.</p>
-        @if (canCreate) { <p class="muted">Creá la primera con el botón "Nueva feria".</p> }
+        @if (activeTab === 'activo') {
+          <p>No hay ferias activas.</p>
+          @if (canCreate) { <p class="muted">Activá una feria cerrada o creá una nueva.</p> }
+        } @else {
+          <p>No hay ferias cerradas aún.</p>
+        }
       </div>
     }
 
     <div class="study-grid">
-      @for (study of studies; track study.id) {
+      @for (study of visibleStudies; track study.id) {
         <div class="study-card-wrap">
           <a class="study-card" [routerLink]="['/estudios', study.id]">
             <div class="study-card-top">
@@ -156,6 +171,13 @@ import { ButtonComponent } from '../shared/button.component';
     .target-item { display:grid; gap:.25rem; color:#475569; font-size:.75rem; font-weight:600; }
     .target-item input { width:100%; padding:.45rem .6rem; border:1px solid #cbd5e1; border-radius:7px; font:inherit; }
 
+    .tab-nav { display:flex; gap:.5rem; margin-bottom:1.25rem; }
+    .tab-btn { background:#f1f5f9; border:1px solid #e2e8f0; border-radius:8px; padding:.45rem 1rem; font-size:.85rem; font-weight:600; color:#475569; cursor:pointer; display:flex; align-items:center; gap:.45rem; transition:background .15s, color .15s; }
+    .tab-btn:hover { background:#e2e8f0; }
+    .tab-btn.tab-active { background:#0d2b24; color:#8dcab8; border-color:#0d2b24; }
+    .tab-count { font-size:.72rem; font-weight:700; background:rgba(255,255,255,.15); border-radius:99px; padding:.1rem .45rem; }
+    .tab-btn:not(.tab-active) .tab-count { background:#e2e8f0; color:#64748b; }
+
     .empty-state { text-align:center; padding:3rem 1rem; color:#64748b; }
 
     .study-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:1.1rem; }
@@ -208,7 +230,20 @@ export class EstudiosComponent implements OnInit {
   showForm = false;
   formError = '';
   togglingId: string | null = null;
+  activeTab: 'activo' | 'cerrado' = 'activo';
   form = { title: '', description: '', shift: 'mañana', date: '', modeCode: '' };
+
+  get activeStudies(): Study[] {
+    return this.studies.filter((s) => s.status === 'activo');
+  }
+
+  get closedStudies(): Study[] {
+    return this.studies.filter((s) => s.status !== 'activo');
+  }
+
+  get visibleStudies(): Study[] {
+    return this.activeTab === 'activo' ? this.activeStudies : this.closedStudies;
+  }
 
   get groupSummary(): string {
     return this.groups.map((g) => g.etiqueta).join(' · ');

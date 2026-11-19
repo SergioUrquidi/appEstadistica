@@ -429,7 +429,7 @@ app.put('/api/surveys/:surveyId/mode', authenticate, allowRoles('admin', 'superu
 app.post('/api/surveys/:surveyId/questions', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
-  if (survey.status !== 'draft') return res.status(409).json({ error: 'No se pueden cambiar preguntas después de activar la encuesta.' });
+  if (!['draft', 'paused'].includes(survey.status)) return res.status(409).json({ error: 'No se pueden cambiar preguntas después de activar la encuesta.' });
   if (!survey.mode_code) return res.status(409).json({ error: 'Define el enfoque de la encuesta antes de agregar preguntas.' });
   const input = validate(z.object({
     prompt: z.string().trim().min(1).max(1000),

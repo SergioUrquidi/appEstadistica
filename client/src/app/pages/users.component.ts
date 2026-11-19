@@ -478,7 +478,7 @@ onSearch(): void {
       const detail = await firstValueFrom(
         this.http.get<{ surveys: ActiveSurvey[] }>(`/api/estudios/${this.feriaId}`),
       );
-      this.surveysForFeria = (detail.surveys ?? []).filter((s) => s.status === 'active');
+      this.surveysForFeria = (detail.surveys ?? []).filter((s) => s.status === 'active' || s.status === 'paused');
     } catch {
       this.surveysForFeria = [];
     } finally {
