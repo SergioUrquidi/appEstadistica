@@ -486,6 +486,46 @@ app.put('/api/surveys/:surveyId/questions/:questionId/answer-key', authenticate,
   return res.json(question.rows[0]);
 }));
 
+app.put('/api/surveys/:surveyId/questions/:questionId', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
+  const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
+  if (error) return res.status(status).json({ error });
+  if (survey.status !== 'draft') return res.status(409).json({ error: 'No se pueden cambiar preguntas después de activar la encuesta.' });
+  const input = validate(z.object({
+    prompt: z.string().trim().min(1).max(1000),
+  }), req.body);
+  try {
+    await pool.query(
+      'CALL estadistica.usp_editar_pregunta($1, $2, $3, $4)',
+      [survey.id, req.params.questionId, input.prompt, req.user.sub],
+    );
+  } catch (error) {
+    if (error.code === 'P0001') return res.status(400).json({ error: error.message.replaceAll('_', ' ') });
+    throw error;
+  }
+  const question = await pool.query(
+    'SELECT * FROM estadistica.fn_preguntas_encuesta_admin($1) WHERE id = $2',
+    [survey.id, req.params.questionId],
+  );
+  if (!question.rows[0]) return res.status(404).json({ error: 'No se encontró la pregunta.' });
+  return res.json(question.rows[0]);
+}));
+
+app.delete('/api/surveys/:surveyId/questions/:questionId', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
+  const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
+  if (error) return res.status(status).json({ error });
+  if (survey.status !== 'draft') return res.status(409).json({ error: 'No se pueden cambiar preguntas después de activar la encuesta.' });
+  try {
+    await pool.query(
+      'CALL estadistica.usp_eliminar_pregunta($1, $2, $3)',
+      [survey.id, req.params.questionId, req.user.sub],
+    );
+  } catch (error) {
+    if (error.code === 'P0001') return res.status(400).json({ error: error.message.replaceAll('_', ' ') });
+    throw error;
+  }
+  return res.status(204).send();
+}));
+
 app.post('/api/surveys/:surveyId/activate', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });

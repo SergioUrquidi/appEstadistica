@@ -54,8 +54,25 @@ interface OptionDraft {
                 <li>
                   <span class="number">{{ question.position }}</span>
                   <div class="question-content">
-                    <strong>{{ question.prompt }}</strong><small>{{ questionSummary(question) }}</small>
-                    @if (survey.requires_correct_answer) {
+                    @if (editingQuestionId === question.id) {
+                      <form class="edit-prompt-form" (ngSubmit)="saveEditQuestion(question)">
+                        <input [name]="'edit-' + question.id" [(ngModel)]="editingPrompt" maxlength="1000" required autofocus>
+                        <div class="edit-actions">
+                          <app-button type="submit" variant="secondary" [disabled]="busy || !editingPrompt.trim()">Guardar</app-button>
+                          <button type="button" class="cancel-btn" (click)="cancelEditQuestion()">Cancelar</button>
+                        </div>
+                      </form>
+                    } @else {
+                      <div class="question-header">
+                        <strong>{{ question.prompt }}</strong>
+                        <div class="question-actions">
+                          <button type="button" class="action-icon" title="Editar pregunta" [disabled]="busy" (click)="startEditQuestion(question)">✎</button>
+                          <button type="button" class="action-icon delete-icon" title="Eliminar pregunta" [disabled]="busy" (click)="deleteQuestion(question)">✕</button>
+                        </div>
+                      </div>
+                      <small>{{ questionSummary(question) }}</small>
+                    }
+                    @if (survey.requires_correct_answer && editingQuestionId !== question.id) {
                       <form class="key-form" (ngSubmit)="saveQuestionKey(question)">
                         @if (question.is_numeric) {
                           <label>Respuesta correcta exacta
@@ -228,6 +245,17 @@ interface OptionDraft {
     .remove-option,.add-option { padding:.55rem .75rem; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#334155; font:inherit; cursor:pointer; }
     .add-option { justify-self:start; }
     .number { display:grid; place-items:center; min-width:1.6rem; height:1.6rem; border-radius:50%; color:#8dcab8; background:#e8f5ef; font-weight:800; }
+    .question-header { display:flex; align-items:flex-start; justify-content:space-between; gap:.5rem; }
+    .question-header strong { flex:1; }
+    .question-actions { display:flex; gap:.35rem; flex-shrink:0; }
+    .action-icon { display:grid; place-items:center; width:1.7rem; height:1.7rem; border:1px solid #cbd5e1; border-radius:7px; background:#fff; color:#475569; font-size:.8rem; cursor:pointer; transition:background .15s,color .15s; }
+    .action-icon:hover:not(:disabled) { background:#f1f5f9; color:#0f172a; }
+    .action-icon:disabled { opacity:.4; cursor:default; }
+    .delete-icon:hover:not(:disabled) { background:#fef2f2; color:#b42318; border-color:#fca5a5; }
+    .edit-prompt-form { display:grid; gap:.5rem; }
+    .edit-actions { display:flex; gap:.5rem; align-items:center; }
+    .cancel-btn { padding:.45rem .85rem; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#475569; font:inherit; font-size:.84rem; cursor:pointer; }
+    .cancel-btn:hover { background:#f1f5f9; }
     .question-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.8rem; margin-top:1rem; }
     label { display:grid; gap:.4rem; color:#334155; font-size:.86rem; font-weight:700; }
     input,select,textarea { width:100%; padding:.7rem; border:1px solid #cbd5e1; border-radius:8px; font:inherit; }
@@ -280,6 +308,8 @@ export class SurveyDetailComponent implements OnInit, OnDestroy {
   savedAt: string | null = null;
   error = '';
   busy = false;
+  editingQuestionId: string | null = null;
+  editingPrompt = '';
   private surveyId = '';
   private stopWatching: (() => void) | null = null;
 
@@ -363,6 +393,53 @@ export class SurveyDetailComponent implements OnInit, OnDestroy {
       this.survey.questions = this.survey.questions.map((item) => item.id === updated.id ? updated : item);
     } catch {
       this.error = 'No se pudo guardar la clave de esta pregunta.';
+    } finally {
+      this.busy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  startEditQuestion(question: Question): void {
+    this.editingQuestionId = question.id;
+    this.editingPrompt = question.prompt;
+    this.error = '';
+  }
+
+  cancelEditQuestion(): void {
+    this.editingQuestionId = null;
+    this.editingPrompt = '';
+  }
+
+  async saveEditQuestion(question: Question): Promise<void> {
+    if (!this.survey || !this.editingPrompt.trim()) return;
+    this.busy = true;
+    this.error = '';
+    try {
+      const updated = await firstValueFrom(this.http.put<Question>(
+        `/api/surveys/${this.surveyId}/questions/${question.id}`,
+        { prompt: this.editingPrompt.trim() },
+      ));
+      this.survey.questions = this.survey.questions.map((item) => item.id === updated.id ? updated : item);
+      this.editingQuestionId = null;
+      this.editingPrompt = '';
+    } catch {
+      this.error = 'No se pudo editar la pregunta.';
+    } finally {
+      this.busy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async deleteQuestion(question: Question): Promise<void> {
+    if (!this.survey) return;
+    if (!confirm(`¿Eliminar la pregunta "${question.prompt}"?`)) return;
+    this.busy = true;
+    this.error = '';
+    try {
+      await firstValueFrom(this.http.delete(`/api/surveys/${this.surveyId}/questions/${question.id}`));
+      this.survey.questions = this.survey.questions.filter((item) => item.id !== question.id);
+    } catch {
+      this.error = 'No se pudo eliminar la pregunta.';
     } finally {
       this.busy = false;
       this.cdr.markForCheck();
