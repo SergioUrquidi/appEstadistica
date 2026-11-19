@@ -68,6 +68,11 @@ import { ButtonComponent } from './shared/button.component';
               <span class="nav-icon">⚙</span><span class="nav-label">Admin</span>
             </a>
           }
+          @if (user.role === 'superuser') {
+            <a routerLink="/resultados" routerLinkActive="active-link" (click)="menuOpen = false">
+              <span class="nav-icon">📈</span><span class="nav-label">Resultados</span>
+            </a>
+          }
         </nav>
         <div class="sidebar-footer">
           <div class="user-avatar">{{ user.display_name[0] }}</div>

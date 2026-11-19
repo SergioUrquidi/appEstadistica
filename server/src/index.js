@@ -1237,6 +1237,246 @@ app.get('/api/estudios/:studyId', authenticate, asyncRoute(async (req, res) => {
   });
 }));
 
+// ── REPORTE ESTADÍSTICO POR FERIA (solo superuser) ────────────────────────────
+
+async function buildEstudioReporte(studyId) {
+  const studyResult = await pool.query(
+    'SELECT * FROM estadistica.vw_estudios_lista WHERE id = $1', [studyId],
+  );
+  if (!studyResult.rows[0]) return null;
+  const study = studyResult.rows[0];
+  const surveysResult = await pool.query(
+    'SELECT * FROM estadistica.fn_encuestas_por_estudio_completo($1)', [study.id],
+  );
+  const surveys = surveysResult.rows;
+  const reports = [];
+  for (const survey of surveys) {
+    const surveyObj = {
+      id: survey.id, title: survey.titulo ?? survey.title,
+      group: survey.grupo ?? survey.group, group_id: survey.grupo_id ?? survey.group_id,
+      status: survey.estado ?? survey.status,
+    };
+    const r = await buildReport(surveyObj);
+    reports.push({ ...r, group: surveyObj.group, group_id: surveyObj.group_id });
+  }
+  const respondentTargets = await pool.query(
+    'SELECT * FROM estadistica.fn_metas_encuestado_estudio($1)', [study.id],
+  );
+  return { study, surveys: reports, respondentTargets: respondentTargets.rows };
+}
+
+app.get('/api/estudios/:studyId/reporte-estadistico', authenticate, allowRoles('superuser'), asyncRoute(async (req, res) => {
+  const data = await buildEstudioReporte(req.params.studyId);
+  if (!data) return res.status(404).json({ error: 'Estudio no encontrado.' });
+  return res.json(data);
+}));
+
+app.get('/api/estudios/:studyId/reporte-estadistico.pdf', authenticate, allowRoles('superuser'), asyncRoute(async (req, res) => {
+  const data = await buildEstudioReporte(req.params.studyId);
+  if (!data) return res.status(404).json({ error: 'Estudio no encontrado.' });
+  const { study, surveys, respondentTargets } = data;
+
+  res.setHeader('content-type', 'application/pdf');
+  res.setHeader('content-disposition', `attachment; filename="reporte-${study.id}.pdf"`);
+
+  const pdf = new PDFDocument({ margin: 50, size: 'A4' });
+  pdf.pipe(res);
+
+  const W = pdf.page.width - 100;
+  const dateStr = study.date ? new Date(study.date).toLocaleDateString('es-BO', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Sin fecha';
+  const now = new Date().toLocaleDateString('es-BO', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  // ── Portada ──────────────────────────────────────────────────────────────────
+  pdf.rect(50, 50, W, 160).fill('#0d2b24');
+  pdf.fillColor('#ffffff').fontSize(22).font('Helvetica-Bold')
+     .text('INFORME ESTADÍSTICO CUANTITATIVO', 70, 75, { width: W - 40, align: 'center' });
+  pdf.fontSize(14).font('Helvetica')
+     .text(study.title ?? 'Feria', 70, 110, { width: W - 40, align: 'center' });
+  pdf.fontSize(10)
+     .text(`Fecha: ${dateStr}  ·  Turno: ${study.shift ?? '—'}`, 70, 140, { width: W - 40, align: 'center' });
+  pdf.text(`Generado: ${now}`, 70, 158, { width: W - 40, align: 'center' });
+  pdf.fillColor('#000000');
+
+  pdf.moveDown(2);
+  pdf.fontSize(11).font('Helvetica-Bold').text('TIPO DE ESTUDIO', { underline: false });
+  pdf.fontSize(10).font('Helvetica').list([
+    'Tipo: Cuantitativo',
+    'Diseño: Descriptivo-propositivo',
+    'Técnica: Encuesta estructurada',
+    'Universo: Participantes de la feria (expositores, jurados, participantes y público)',
+  ], { bulletRadius: 2, textIndent: 10, lineGap: 2 });
+
+  // ── Resumen global ───────────────────────────────────────────────────────────
+  pdf.addPage();
+  pdf.fontSize(16).font('Helvetica-Bold').text('RESUMEN GENERAL');
+  pdf.moveDown(0.5);
+
+  let totalResponses = 0, totalParticipants = 0, totalJudges = 0, totalExhibitors = 0;
+  for (const r of surveys) {
+    totalResponses   += r.summary.response_count ?? 0;
+    totalParticipants += r.summary.participants_count ?? 0;
+    totalJudges      += r.summary.judges_count ?? 0;
+    totalExhibitors  += r.summary.exhibitors_count ?? 0;
+  }
+  const tableData = [
+    ['Encuestas analizadas', String(surveys.length)],
+    ['Total de respuestas', String(totalResponses)],
+    ['Participantes', String(totalParticipants)],
+    ['Jurados', String(totalJudges)],
+    ['Expositores', String(totalExhibitors)],
+  ];
+  if (respondentTargets.length > 0) {
+    for (const t of respondentTargets) {
+      tableData.push([`Meta ${t.grupo_encuestado ?? t.respondentGroup ?? '—'}`, String(t.target_count ?? '—')]);
+    }
+  }
+  const col1 = 50, col2 = 300, rowH = 20;
+  let ty = pdf.y;
+  pdf.rect(col1, ty, W, rowH).fill('#0d2b24');
+  pdf.fillColor('#ffffff').fontSize(10).font('Helvetica-Bold')
+     .text('Indicador', col1 + 5, ty + 5, { width: 240 })
+     .text('Valor', col2 + 5, ty + 5, { width: 100 });
+  pdf.fillColor('#000000');
+  ty += rowH;
+  for (let i = 0; i < tableData.length; i++) {
+    const bg = i % 2 === 0 ? '#f0f7f4' : '#ffffff';
+    pdf.rect(col1, ty, W, rowH).fill(bg);
+    pdf.fillColor('#000000').fontSize(10).font('Helvetica')
+       .text(tableData[i][0], col1 + 5, ty + 5, { width: 240 })
+       .text(tableData[i][1], col2 + 5, ty + 5, { width: 100 });
+    ty += rowH;
+  }
+  pdf.y = ty + 10;
+
+  // ── Por cada encuesta/grupo ──────────────────────────────────────────────────
+  for (const surveyReport of surveys) {
+    pdf.addPage();
+    const groupLabel = surveyReport.group ?? 'Encuesta';
+    const { summary, questions } = surveyReport;
+
+    pdf.rect(50, pdf.y, W, 28).fill('#1a4a3a');
+    pdf.fillColor('#ffffff').fontSize(14).font('Helvetica-Bold')
+       .text(`GRUPO: ${groupLabel}`, 60, pdf.y + 7, { width: W - 20 });
+    pdf.fillColor('#000000');
+    pdf.moveDown(2);
+
+    pdf.fontSize(10).font('Helvetica')
+       .text(`Respuestas: ${summary.response_count}  |  Participantes: ${summary.participants_count}  |  Jurados: ${summary.judges_count}  |  Expositores: ${summary.exhibitors_count}`);
+    pdf.moveDown(1);
+
+    for (const q of questions) {
+      if (pdf.y > pdf.page.height - 180) pdf.addPage();
+
+      pdf.rect(50, pdf.y, W, 20).fill('#e8f4ee');
+      pdf.fillColor('#000000').fontSize(11).font('Helvetica-Bold')
+         .text(q.prompt, 55, pdf.y + 4, { width: W - 10 });
+      pdf.moveDown(1.5);
+
+      pdf.fontSize(9).font('Helvetica').fillColor('#444444')
+         .text(`Tipo: ${q.questionTypeLabel}  |  Universo (N): ${q.universe}`);
+      pdf.fillColor('#000000');
+      pdf.moveDown(0.5);
+
+      if (q.isNumeric && q.universe > 0) {
+        // Tabla de estadísticos
+        const stats = [
+          ['Media (x̄)', q.mean != null ? Number(q.mean).toFixed(4) : 'N/D'],
+          ['Mediana', q.median != null ? Number(q.median).toFixed(4) : 'N/D'],
+          ['Moda', q.mode != null ? Number(q.mode).toFixed(4) : 'N/D'],
+          ['Rango', q.value_range != null ? Number(q.value_range).toFixed(4) : 'N/D'],
+          ['Mínimo', q.minimum != null ? Number(q.minimum).toFixed(4) : 'N/D'],
+          ['Máximo', q.maximum != null ? Number(q.maximum).toFixed(4) : 'N/D'],
+          ['Varianza (S²)', q.variance != null ? Number(q.variance).toFixed(4) : 'N/D'],
+          ['Desviación estándar (S)', q.standard_deviation != null ? Number(q.standard_deviation).toFixed(4) : 'N/D'],
+          ['Coef. de variación (%)', q.coefficient_of_variation != null ? Number(q.coefficient_of_variation).toFixed(2) + '%' : 'N/D'],
+        ];
+        const colW = Math.floor(W / 3);
+        let sx = 50, sy = pdf.y;
+        for (let i = 0; i < stats.length; i++) {
+          const col = i % 3, row = Math.floor(i / 3);
+          const cx = sx + col * colW, cy = sy + row * 18;
+          if (i === 0) {
+            pdf.rect(sx, sy - 2, W, Math.ceil(stats.length / 3) * 18 + 4).fill('#f9fdfc').stroke('#c8e6d8');
+          }
+          pdf.fillColor('#1a4a3a').fontSize(8).font('Helvetica-Bold')
+             .text(stats[i][0] + ':', cx + 3, cy + 3, { width: colW - 6 });
+          pdf.fillColor('#000000').fontSize(8).font('Helvetica')
+             .text(stats[i][1], cx + 3, cy + 11, { width: colW - 6 });
+        }
+        pdf.y = sy + Math.ceil(stats.length / 3) * 18 + 10;
+      }
+
+      // Tabla de frecuencias
+      if (q.frequencies.length > 0) {
+        if (pdf.y > pdf.page.height - 100) pdf.addPage();
+        pdf.fontSize(9).font('Helvetica-Bold').text('Distribución de frecuencias:');
+        pdf.moveDown(0.3);
+        const fH = 16;
+        let fy = pdf.y;
+        const fW1 = Math.floor(W * 0.5), fW2 = Math.floor(W * 0.25), fW3 = Math.floor(W * 0.25);
+        pdf.rect(50, fy, W, fH).fill('#0d2b24');
+        pdf.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold')
+           .text('Valor / Categoría', 55, fy + 4, { width: fW1 - 5 })
+           .text('Frecuencia (fi)', 55 + fW1, fy + 4, { width: fW2 - 5 })
+           .text('Frecuencia rel. (%)', 55 + fW1 + fW2, fy + 4, { width: fW3 - 5 });
+        pdf.fillColor('#000000');
+        fy += fH;
+        const totalFreq = q.frequencies.reduce((s, f) => s + f.frequency, 0);
+        for (let i = 0; i < q.frequencies.length; i++) {
+          const f = q.frequencies[i];
+          const pct = totalFreq > 0 ? ((f.frequency / totalFreq) * 100).toFixed(1) + '%' : '—';
+          const bg = i % 2 === 0 ? '#f0f7f4' : '#ffffff';
+          pdf.rect(50, fy, W, fH).fill(bg);
+          pdf.fillColor('#000000').fontSize(8).font('Helvetica')
+             .text(String(f.value), 55, fy + 4, { width: fW1 - 5 })
+             .text(String(f.frequency), 55 + fW1, fy + 4, { width: fW2 - 5 })
+             .text(pct, 55 + fW1 + fW2, fy + 4, { width: fW3 - 5 });
+          fy += fH;
+          if (fy > pdf.page.height - 60) { pdf.addPage(); fy = 50; }
+        }
+        pdf.y = fy + 8;
+      }
+      pdf.moveDown(1);
+    }
+  }
+
+  // ── Análisis propositivo (IA almacenada) ─────────────────────────────────────
+  // Si existe un análisis guardado en alguna encuesta de la feria, incluirlo
+  for (const surveyReport of surveys) {
+    const draft = await pool.query(
+      'SELECT * FROM estadistica.fn_analisis_borrador($1)', [surveyReport.survey.id],
+    );
+    if (draft.rows[0]?.body) {
+      pdf.addPage();
+      pdf.rect(50, pdf.y, W, 28).fill('#0d2b24');
+      pdf.fillColor('#ffffff').fontSize(14).font('Helvetica-Bold')
+         .text(`ANÁLISIS PROPOSITIVO — ${surveyReport.group ?? 'Encuesta'}`, 60, pdf.y + 7, { width: W - 20 });
+      pdf.fillColor('#000000');
+      pdf.moveDown(2);
+      pdf.fontSize(10).font('Helvetica').text(draft.rows[0].body, { lineGap: 4 });
+    }
+  }
+
+  // ── Pie de página informativo ─────────────────────────────────────────────────
+  pdf.addPage();
+  pdf.fontSize(11).font('Helvetica-Bold').text('NOTAS METODOLÓGICAS');
+  pdf.moveDown(0.5);
+  pdf.fontSize(9).font('Helvetica').list([
+    'El presente informe corresponde a un estudio cuantitativo-descriptivo con enfoque propositivo.',
+    'Los datos fueron recolectados mediante encuesta estructurada aplicada en campo durante la feria.',
+    'La media aritmética, mediana, moda y distribuciones de frecuencia se calcularon sobre el total de respuestas válidas (universo N).',
+    'El rango se obtiene como la diferencia entre el valor máximo y el mínimo observado.',
+    'La varianza y la desviación estándar corresponden a la varianza muestral (denominador N-1).',
+    'El coeficiente de variación (CV%) permite comparar la dispersión relativa entre variables de distinta escala.',
+    'Los grupos analizados corresponden a las categorías de encuestados definidas en el sistema: participantes, jurados, expositores y público general.',
+  ], { bulletRadius: 2, textIndent: 10, lineGap: 3 });
+  pdf.moveDown(1);
+  pdf.fontSize(9).fillColor('#666666')
+     .text(`Universidad de los Andes — UNANDES · Estadística I (EST-343) · ${now}`);
+
+  pdf.end();
+}));
+
 app.get('/api/dashboard/ferias', asyncRoute(async (_req, res) => {
   const result = await pool.query(
     "SELECT * FROM estadistica.vw_estudios_lista WHERE status = 'activo' ORDER BY created_at DESC",

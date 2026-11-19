@@ -21,6 +21,7 @@ export const routes: Routes = [
   { path: 'encuestas/:id', component: SurveyDetailComponent, canActivate: [roleGuard('superuser', 'admin')] },
   { path: 'usuarios', component: UsersComponent, canActivate: [roleGuard('superuser', 'admin')] },
   { path: 'admin', component: AdminComponent, canActivate: [roleGuard('superuser', 'admin')] },
+  { path: 'resultados', loadComponent: () => import('./pages/resultados.component').then((m) => m.ResultadosComponent), canActivate: [roleGuard('superuser')] },
   { path: 'login', redirectTo: 'iniciar-sesion', pathMatch: 'full' },
   { path: 'respond/:token', redirectTo: 'responder/:token', pathMatch: 'full' },
   { path: 'surveys', redirectTo: 'encuestas', pathMatch: 'full' },
