@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
-import { HttpClient } from '@angular/common/http';
+import { EstudioService } from '../core/estudio.service';
 import { SocketService } from '../core/socket.service';
 import { StudyDetail, StudySurvey } from '../core/models';
 
@@ -186,7 +186,7 @@ export class EstudioDetailComponent implements OnInit, OnDestroy {
 
   constructor(
     private readonly route: ActivatedRoute,
-    private readonly http: HttpClient,
+    private readonly estudioService: EstudioService,
     private readonly socket: SocketService,
     private readonly cdr: ChangeDetectorRef,
   ) {}
@@ -194,7 +194,7 @@ export class EstudioDetailComponent implements OnInit, OnDestroy {
   async ngOnInit(): Promise<void> {
     const studyId = this.route.snapshot.paramMap.get('id') ?? '';
     try {
-      this.study = await firstValueFrom(this.http.get<StudyDetail>(`/api/estudios/${studyId}`));
+      this.study = await firstValueFrom(this.estudioService.getEstudio(studyId));
       this.countsMap = Object.fromEntries(
         (this.study.surveys as StudySurvey[]).map((s) => [s.group, s.response_count]),
       );

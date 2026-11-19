@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { Survey, SurveyMode } from '../core/models';
-import { HttpClient } from '@angular/common/http';
+import { SurveyService } from '../core/survey.service';
 import { ButtonComponent } from '../shared/button.component';
 
 @Component({
@@ -75,7 +75,7 @@ export class SurveysComponent implements OnInit {
   busy = false;
 
   constructor(
-    private readonly http: HttpClient,
+    private readonly surveyService: SurveyService,
     private readonly cdr: ChangeDetectorRef,
   ) {}
 
@@ -86,7 +86,7 @@ export class SurveysComponent implements OnInit {
 
   async loadModes(): Promise<void> {
     try {
-      this.modes = await firstValueFrom(this.http.get<SurveyMode[]>('/api/survey-modes'));
+      this.modes = await firstValueFrom(this.surveyService.getSurveyModes());
     } catch {
       this.error = 'No se pudieron cargar los modos de encuesta.';
     } finally {
@@ -96,7 +96,7 @@ export class SurveysComponent implements OnInit {
 
   async loadSurveys(): Promise<void> {
     try {
-      this.surveys = await firstValueFrom(this.http.get<Survey[]>('/api/surveys'));
+      this.surveys = await firstValueFrom(this.surveyService.getSurveys());
     } catch {
       this.error = 'No se pudieron cargar las encuestas.';
     } finally {
@@ -109,10 +109,7 @@ export class SurveysComponent implements OnInit {
     this.busy = true;
     this.error = '';
     try {
-      const survey = await firstValueFrom(this.http.post<Survey>('/api/surveys', {
-        title: this.title.trim(),
-        modeCode: this.modeCode,
-      }));
+      const survey = await firstValueFrom(this.surveyService.createSurvey(this.title.trim(), this.modeCode));
       this.title = '';
       this.modeCode = '';
       this.surveys = [survey, ...this.surveys];
