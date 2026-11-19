@@ -56,8 +56,18 @@ interface EstudioReporte {
       } @else if (error) {
         <div class="error-state" role="alert">{{ error }}</div>
       } @else {
+        <nav class="tab-nav" role="tablist">
+          <button role="tab" class="tab-btn" [class.tab-active]="activeTab === 'activo'"
+                  (click)="activeTab = 'activo'" [attr.aria-selected]="activeTab === 'activo'">
+            Activas <span class="tab-count">{{ feriasPorTab('activo').length }}</span>
+          </button>
+          <button role="tab" class="tab-btn" [class.tab-active]="activeTab === 'cerrado'"
+                  (click)="activeTab = 'cerrado'" [attr.aria-selected]="activeTab === 'cerrado'">
+            Cerradas <span class="tab-count">{{ feriasPorTab('cerrado').length }}</span>
+          </button>
+        </nav>
         <div class="ferias-grid">
-          @for (feria of ferias; track feria.id) {
+          @for (feria of feriasPorTab(activeTab); track feria.id) {
             <div class="feria-card" [class.feria-card--selected]="selectedId === feria.id">
               <div class="feria-card__header">
                 <span class="feria-status" [class.feria-status--activo]="feria.status === 'activo'"
@@ -81,6 +91,9 @@ interface EstudioReporte {
                 </a>
               </div>
             </div>
+          }
+          @if (feriasPorTab(activeTab).length === 0) {
+            <p class="empty-tab">No hay ferias {{ activeTab === 'activo' ? 'activas' : 'cerradas' }}.</p>
           }
         </div>
       }
@@ -180,6 +193,13 @@ interface EstudioReporte {
     .loading-state, .error-state { padding: 32px; text-align: center; color: #6b7280; }
     .error-state { color: #dc2626; }
 
+    .tab-nav { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid #e5e7eb; padding-bottom: 0; }
+    .tab-btn { background: transparent; border: none; border-bottom: 3px solid transparent; padding: 8px 16px; font-size: 0.9rem; font-weight: 600; color: #6b7280; cursor: pointer; margin-bottom: -2px; transition: color .15s, border-color .15s; }
+    .tab-btn:hover { color: #0d2b24; }
+    .tab-active { color: #0d2b24; border-bottom-color: #0d2b24; }
+    .tab-count { display: inline-flex; align-items: center; justify-content: center; background: #e5e7eb; color: #374151; border-radius: 999px; font-size: 0.75rem; min-width: 20px; height: 20px; padding: 0 6px; margin-left: 6px; }
+    .tab-active .tab-count { background: #0d2b24; color: #8dcab8; }
+    .empty-tab { color: #9ca3af; font-size: 0.875rem; padding: 16px 0; }
     .ferias-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 32px; }
     .feria-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; transition: box-shadow .15s; }
     .feria-card:hover { box-shadow: 0 4px 16px rgba(13,43,36,.1); }
@@ -248,6 +268,12 @@ export class ResultadosComponent implements OnInit {
   loadingReport: string | null = null;
   selectedId: string | null = null;
   activeGroup = '';
+  activeTab: 'activo' | 'cerrado' = 'activo';
+
+  feriasPorTab(tab: 'activo' | 'cerrado'): Study[] {
+    if (tab === 'activo') return this.ferias.filter((f) => f.status === 'activo');
+    return this.ferias.filter((f) => f.status !== 'activo');
+  }
 
   async ngOnInit(): Promise<void> {
     try {
