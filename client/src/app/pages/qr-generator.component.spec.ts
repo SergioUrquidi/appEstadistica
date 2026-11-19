@@ -30,7 +30,7 @@ describe('QrGeneratorComponent', () => {
     http.expectOne('/api/grupos').flush([
       { id: 'group-id', nombre: 'jurados', etiqueta: 'Jurados', icono: '⚖', orden: 1, activo: true },
     ]);
-    http.expectOne('/api/respondent-groups').flush([
+    http.expectOne('/api/respondent-groups/con-encuesta-activa').flush([
       { value: 'jurados', label: 'jurados' },
       { value: 'expositores', label: 'expositores' },
     ]);
