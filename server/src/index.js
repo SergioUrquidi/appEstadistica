@@ -300,7 +300,20 @@ app.get('/api/surveys', authenticate, asyncRoute(async (req, res) => {
       'SELECT * FROM estadistica.fn_encuestas_asignadas_encuestador($1, $2)',
       [req.user.sub, groupId],
     );
-    return res.json(result.rows.filter((r) => activaSet.has(r.id)));
+    return res.json(
+      result.rows
+        .filter((r) => activaSet.has(r.id))
+        .map((r) => ({
+          id: r.id,
+          title: r.titulo,
+          description: r.descripcion,
+          status: r.estado === 'activa' ? 'active'
+                : r.estado === 'pausada' ? 'paused'
+                : r.estado === 'cerrada' ? 'closed'
+                : 'draft',
+          created_at: r.creado_en,
+        })),
+    );
   }
   const result = await pool.query(
     'SELECT * FROM estadistica.fn_encuestas_usuario_por_grupo($1, $2, $3)',
@@ -1017,7 +1030,7 @@ app.get('/api/grupos/con-encuesta-activa', authenticate, asyncRoute(async (req, 
   try {
     const gruposConFeriaActiva = await pool.query(
       `SELECT DISTINCT g.id FROM estadistica.grupos g
-       JOIN estadistica.encuestas es ON es.grupo_id = g.id
+       JOIN estadistica.encuestas es ON es.grupo = g.nombre
        JOIN estadistica.estudios et ON et.id = es.estudio_id
        WHERE et.estado = 'activo' AND es.estado = 'activa'`,
     );
