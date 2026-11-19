@@ -979,8 +979,8 @@ app.post('/api/admin/grupos', authenticate, allowRoles('admin', 'superuser'), as
     orden: z.number().int().min(0).max(99).default(0),
   }), req.body);
   const r = await pool.query(
-    'CALL estadistica.usp_crear_grupo($1, $2, $3, $4, $5, NULL, NULL)',
-    [input.nombre, input.etiqueta, input.icono, input.orden, req.user.sub],
+    'CALL estadistica.usp_crear_grupo($1, $2, $3, $4, NULL, NULL)',
+    [input.nombre, input.etiqueta, input.icono, input.orden],
   );
   const row = r.rows[0];
   if (row.p_error) return res.status(400).json({ error: row.p_error });
@@ -995,8 +995,8 @@ app.put('/api/admin/grupos/:id', authenticate, allowRoles('admin', 'superuser'),
     activo: z.boolean().default(true),
   }), req.body);
   const r = await pool.query(
-    'CALL estadistica.usp_actualizar_grupo($1, $2, $3, $4, $5, $6, NULL, NULL)',
-    [req.params.id, input.etiqueta, input.icono, input.orden, input.activo, req.user.sub],
+    'CALL estadistica.usp_actualizar_grupo($1, $2, $3, $4, $5, NULL, NULL)',
+    [req.params.id, input.etiqueta, input.icono, input.orden, input.activo],
   );
   const row = r.rows[0];
   if (row.p_error) return res.status(400).json({ error: row.p_error });
@@ -1005,8 +1005,8 @@ app.put('/api/admin/grupos/:id', authenticate, allowRoles('admin', 'superuser'),
 
 app.delete('/api/admin/grupos/:id', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
   const r = await pool.query(
-    'CALL estadistica.usp_eliminar_grupo($1, $2, NULL, NULL)',
-    [req.params.id, req.user.sub],
+    'CALL estadistica.usp_eliminar_grupo($1, NULL, NULL)',
+    [req.params.id],
   );
   const row = r.rows[0];
   if (row.p_error) return res.status(400).json({ error: row.p_error });

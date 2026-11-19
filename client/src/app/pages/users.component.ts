@@ -17,7 +17,7 @@ interface ManagedUser {
 
 interface Estudio {
   id: string;
-  titulo: string;
+  title: string;
   status: string;
 }
 
@@ -79,12 +79,12 @@ const PAGE_SIZE = 10;
           @if (role === 'encuestador') {
             <label>Feria
               @if (estudios.length === 1) {
-                <div class="feria-unica">{{ estudios[0].titulo }}</div>
+                <div class="feria-unica">{{ estudios[0].title }}</div>
               } @else {
                 <select name="feriaId" [(ngModel)]="feriaId" (ngModelChange)="onFeriaChange()" required>
                   <option value="">— Selecciona una feria —</option>
                   @for (e of estudios; track e.id) {
-                    <option [value]="e.id">{{ e.titulo }}</option>
+                    <option [value]="e.id">{{ e.title }}</option>
                   }
                 </select>
               }
@@ -235,7 +235,7 @@ const PAGE_SIZE = 10;
     .create-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; margin-top:.25rem; }
     label { display:grid; gap:.4rem; color:#334155; font-size:.86rem; font-weight:700; }
     .full-row { grid-column:1/-1; }
-    input,select { width:100%; padding:.7rem; border:1px solid #cbd5e1; border-radius:8px; font:inherit; color:#334155 !important; background:#ffffff !important; }
+    input,select { width:100%; padding:.7rem; border:1px solid #cbd5e1; border-radius:8px; font:inherit; color:#334155 !important; background:#ffffff !important; color-scheme:light; }
     select option { color:#334155; background:#ffffff; }
     .feria-unica { width:100%; padding:.7rem; border:1px solid #cbd5e1; border-radius:8px; color:#334155; background:#f8fafc; font-size:inherit; }
     .hint { font-size:.78rem; font-weight:400; color:#64748b; }

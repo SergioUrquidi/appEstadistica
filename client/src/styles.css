@@ -37,7 +37,11 @@
 
   *, *::before, *::after { box-sizing: border-box; }
   button, input, select, textarea { font: inherit; }
-  select { color: #333333 !important; background-color: #ffffff !important; }
+  select {
+    color-scheme: light;
+    color: #333333 !important;
+    background-color: #ffffff !important;
+  }
   select option { color: #333333; background-color: #ffffff; }
 
   button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
