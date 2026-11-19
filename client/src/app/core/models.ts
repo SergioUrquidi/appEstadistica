@@ -12,7 +12,7 @@ export interface Survey {
   group?: string | null;
   group_id?: string | null;
   group_label?: string | null;
-  status: 'draft' | 'active' | 'closed';
+  status: 'draft' | 'active' | 'paused' | 'closed';
   created_at: string;
   response_count?: number;
   mode_code?: string | null;
@@ -125,7 +125,7 @@ export interface StudySurvey {
   etiqueta: string;
   icono: string;
   orden: number;
-  status: 'draft' | 'active' | 'closed';
+  status: 'draft' | 'active' | 'paused' | 'closed';
   response_count: number;
   mode_code: string | null;
   mode_label: string | null;

@@ -489,7 +489,7 @@ app.put('/api/surveys/:surveyId/questions/:questionId/answer-key', authenticate,
 app.put('/api/surveys/:surveyId/questions/:questionId', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
-  if (survey.status !== 'draft') return res.status(409).json({ error: 'No se pueden cambiar preguntas después de activar la encuesta.' });
+  if (!['draft', 'paused'].includes(survey.status)) return res.status(409).json({ error: 'No se pueden cambiar preguntas después de activar la encuesta.' });
   const input = validate(z.object({
     prompt: z.string().trim().min(1).max(1000),
   }), req.body);
@@ -513,7 +513,7 @@ app.put('/api/surveys/:surveyId/questions/:questionId', authenticate, allowRoles
 app.delete('/api/surveys/:surveyId/questions/:questionId', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
   const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
   if (error) return res.status(status).json({ error });
-  if (survey.status !== 'draft') return res.status(409).json({ error: 'No se pueden cambiar preguntas después de activar la encuesta.' });
+  if (!['draft', 'paused'].includes(survey.status)) return res.status(409).json({ error: 'No se pueden cambiar preguntas después de activar la encuesta.' });
   try {
     await pool.query(
       'CALL estadistica.usp_eliminar_pregunta($1, $2, $3)',
@@ -548,6 +548,47 @@ app.post('/api/surveys/:surveyId/activate', authenticate, allowRoles('admin', 's
     [survey.id, req.user.sub],
   );
   if (!callResult.rows[0].p_ok) return res.status(400).json({ error: 'Revisa el enfoque y las claves de respuesta antes de activar.' });
+  return res.json({ id: survey.id, status: 'active' });
+}));
+
+app.post('/api/surveys/:surveyId/pause', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
+  const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
+  if (error) return res.status(status).json({ error });
+  if (survey.status !== 'active') return res.status(409).json({ error: 'Solo se pueden pausar encuestas activas.' });
+  const summary = await pool.query(
+    `SELECT COALESCE(cantidad_respuestas, 0) AS response_count
+     FROM estadistica.vista_resumen_respuestas WHERE encuesta_id = $1`,
+    [survey.id],
+  );
+  const responseCount = Number(summary.rows[0]?.response_count ?? 0);
+  if (responseCount > 0) {
+    return res.status(409).json({ error: 'No se puede pausar una encuesta que ya tiene respuestas.' });
+  }
+  try {
+    await pool.query(
+      'CALL estadistica.usp_pausar_encuesta($1, $2)',
+      [survey.id, req.user.sub],
+    );
+  } catch (error) {
+    if (error.code === 'P0001') return res.status(400).json({ error: error.message.replaceAll('_', ' ') });
+    throw error;
+  }
+  return res.json({ id: survey.id, status: 'paused' });
+}));
+
+app.post('/api/surveys/:surveyId/reactivate', authenticate, allowRoles('admin', 'superuser'), asyncRoute(async (req, res) => {
+  const { survey, error, status } = await findSurveyForUser(req.params.surveyId, req.user);
+  if (error) return res.status(status).json({ error });
+  if (survey.status !== 'paused') return res.status(409).json({ error: 'Solo se pueden reactivar encuestas pausadas.' });
+  try {
+    await pool.query(
+      'CALL estadistica.usp_reactivar_encuesta($1, $2)',
+      [survey.id, req.user.sub],
+    );
+  } catch (error) {
+    if (error.code === 'P0001') return res.status(400).json({ error: error.message.replaceAll('_', ' ') });
+    throw error;
+  }
   return res.json({ id: survey.id, status: 'active' });
 }));
 

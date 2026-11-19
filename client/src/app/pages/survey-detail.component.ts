@@ -25,9 +25,20 @@ interface OptionDraft {
         @if (survey.status === 'draft') {
           <app-button (click)="activate()" [disabled]="busy || !canActivate">Activar encuesta</app-button>
         }
+        @if (survey.status === 'active' && canPause) {
+          <app-button variant="secondary" (click)="pause()" [disabled]="busy">Pausar para editar</app-button>
+        }
+        @if (survey.status === 'paused') {
+          <app-button (click)="reactivate()" [disabled]="busy">Reactivar encuesta</app-button>
+        }
       </header>
 
-      @if (survey.status === 'draft') {
+      @if (survey.status === 'draft' || survey.status === 'paused') {
+        @if (survey.status === 'paused') {
+          <div class="pause-banner" role="alert">
+            <span>⏸ Encuesta pausada — sin respuestas. Edita las preguntas y reactiva cuando estés listo.</span>
+          </div>
+        }
         @if (!survey.mode_code) {
           <section class="panel">
             <h2>Define el enfoque de esta encuesta</h2>
@@ -276,6 +287,7 @@ interface OptionDraft {
     .save-row span { margin-right:auto; font-size:.8rem; }
     .version { color:#64748b; font-size:.8rem; }
     .error { color:#b42318; }
+    .pause-banner { padding:.75rem 1rem; margin-bottom:.75rem; background:#fffbeb; border:1px solid #fcd34d; border-radius:10px; color:#92400e; font-size:.86rem; font-weight:600; }
     .empty-note { padding:1rem; color:#64748b; background:#f8fafc; border-radius:9px; }
     @media(max-width:640px) {
       .question-form,.mode-form { grid-template-columns:1fr; }
@@ -310,6 +322,7 @@ export class SurveyDetailComponent implements OnInit, OnDestroy {
   busy = false;
   editingQuestionId: string | null = null;
   editingPrompt = '';
+  canPause = false;
   private surveyId = '';
   private stopWatching: (() => void) | null = null;
 
@@ -324,7 +337,7 @@ export class SurveyDetailComponent implements OnInit, OnDestroy {
     this.surveyId = this.route.snapshot.paramMap.get('id') ?? '';
     try {
       this.survey = await firstValueFrom(this.http.get<SurveyDetail>(`/api/surveys/${this.surveyId}`));
-      if (this.survey.status === 'draft') {
+      if (this.survey.status === 'draft' || this.survey.status === 'paused') {
         [this.questionTypes, this.surveyModes] = await Promise.all([
           firstValueFrom(this.http.get<QuestionType[]>('/api/question-types')),
           firstValueFrom(this.http.get<SurveyMode[]>('/api/survey-modes')),
@@ -335,6 +348,7 @@ export class SurveyDetailComponent implements OnInit, OnDestroy {
       }
       if (this.survey.status === 'active') {
         await Promise.all([this.loadReport(), this.loadAnalysis()]);
+        this.canPause = (this.report?.summary?.response_count ?? 0) === 0;
         this.stopWatching = this.sockets.watchSurvey(this.surveyId, () => void this.loadReport());
       }
     } catch {
@@ -393,6 +407,47 @@ export class SurveyDetailComponent implements OnInit, OnDestroy {
       this.survey.questions = this.survey.questions.map((item) => item.id === updated.id ? updated : item);
     } catch {
       this.error = 'No se pudo guardar la clave de esta pregunta.';
+    } finally {
+      this.busy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async pause(): Promise<void> {
+    if (!this.survey) return;
+    this.busy = true;
+    this.error = '';
+    try {
+      await firstValueFrom(this.http.post(`/api/surveys/${this.surveyId}/pause`, {}));
+      this.survey.status = 'paused';
+      this.stopWatching?.();
+      this.stopWatching = null;
+      [this.questionTypes, this.surveyModes] = await Promise.all([
+        firstValueFrom(this.http.get<QuestionType[]>('/api/question-types')),
+        firstValueFrom(this.http.get<SurveyMode[]>('/api/survey-modes')),
+      ]);
+      this.questionType = this.questionTypes[0]?.code ?? '';
+      this.onQuestionTypeChange();
+    } catch {
+      this.error = 'No se pudo pausar la encuesta.';
+    } finally {
+      this.busy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async reactivate(): Promise<void> {
+    if (!this.survey) return;
+    this.busy = true;
+    this.error = '';
+    try {
+      await firstValueFrom(this.http.post(`/api/surveys/${this.surveyId}/reactivate`, {}));
+      this.survey.status = 'active';
+      this.canPause = true;
+      await Promise.all([this.loadReport(), this.loadAnalysis()]);
+      this.stopWatching = this.sockets.watchSurvey(this.surveyId, () => void this.loadReport());
+    } catch {
+      this.error = 'No se pudo reactivar la encuesta.';
     } finally {
       this.busy = false;
       this.cdr.markForCheck();
@@ -536,6 +591,7 @@ export class SurveyDetailComponent implements OnInit, OnDestroy {
   async loadReport(): Promise<void> {
     try {
       this.report = await firstValueFrom(this.http.get<SurveyReport>(`/api/surveys/${this.surveyId}/report`));
+      this.canPause = (this.report?.summary?.response_count ?? 0) === 0;
     } catch {
       this.error = 'No se pudo actualizar el reporte.';
     } finally {
@@ -599,7 +655,13 @@ export class SurveyDetailComponent implements OnInit, OnDestroy {
   }
 
   statusLabel(status: SurveyDetail['status']): string {
-    return status === 'active' ? 'Encuesta activa' : status === 'closed' ? 'Encuesta cerrada' : 'Borrador';
+    const labels: Record<string, string> = {
+      active: 'Encuesta activa',
+      paused: 'Encuesta pausada',
+      closed: 'Encuesta cerrada',
+      draft: 'Borrador',
+    };
+    return labels[status] ?? 'Borrador';
   }
 
   get canActivate(): boolean {
