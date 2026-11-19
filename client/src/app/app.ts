@@ -41,9 +41,9 @@ import { ButtonComponent } from './shared/button.component';
 
           @if (user.role === 'encuestador' || user.role === 'admin' || user.role === 'superuser') {
             <div class="nav-group">
-              <a routerLink="/generador-qr" routerLinkActive="active-link" (click)="menuOpen = false">
+              <span class="nav-group-label">
                 <span class="nav-icon">▦</span><span class="nav-label">Generador QR</span>
-              </a>
+              </span>
               <div class="nav-submenu">
                 @for (group of groups; track group.id) {
                   <a class="nav-submenu-link" [routerLink]="['/generador-qr', group.id]" routerLinkActive="active-link" (click)="menuOpen = false">
