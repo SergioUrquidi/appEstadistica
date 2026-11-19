@@ -492,11 +492,27 @@ app.put('/api/surveys/:surveyId/questions/:questionId', authenticate, allowRoles
   if (!['draft', 'paused'].includes(survey.status)) return res.status(409).json({ error: 'No se pueden cambiar preguntas después de activar la encuesta.' });
   const input = validate(z.object({
     prompt: z.string().trim().min(1).max(1000),
+    questionType: z.string().trim().min(1).nullable().default(null),
+    options: z.array(z.object({
+      label: z.string().trim().min(1).max(300),
+      is_correct: z.boolean(),
+    })).nullable().default(null),
+    minValue: z.number().finite().nullable().default(null),
+    maxValue: z.number().finite().nullable().default(null),
   }), req.body);
   try {
     await pool.query(
-      'CALL estadistica.usp_editar_pregunta($1, $2, $3, $4)',
-      [survey.id, req.params.questionId, input.prompt, req.user.sub],
+      'CALL estadistica.usp_editar_pregunta($1, $2, $3, $4, $5, $6, $7, $8::jsonb)',
+      [
+        survey.id,
+        req.params.questionId,
+        input.prompt,
+        req.user.sub,
+        input.questionType,
+        input.minValue,
+        input.maxValue,
+        input.options !== null ? JSON.stringify(input.options) : null,
+      ],
     );
   } catch (error) {
     if (error.code === 'P0001') return res.status(400).json({ error: error.message.replaceAll('_', ' ') });

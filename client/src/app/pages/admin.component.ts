@@ -52,8 +52,8 @@ interface TipoPregunta {
 }
 
 interface RespondentGroup {
-  nombre: string;
-  etiqueta: string;
+  value: string;
+  label: string;
 }
 
 @Component({
@@ -322,8 +322,8 @@ interface RespondentGroup {
                   <td>
                     <select class="form-input" style="font-size:.82rem;padding:.3rem .5rem" [(ngModel)]="editForm.grupoEncuestado">
                       <option value="">— Sin tipo —</option>
-                      @for (g of respondentGroupsParaEdit; track g.nombre) {
-                        <option [value]="g.nombre">{{ g.etiqueta }}</option>
+                      @for (g of respondentGroupsParaEdit; track g.value) {
+                        <option [value]="g.value">{{ g.label }}</option>
                       }
                     </select>
                   </td>
@@ -742,7 +742,7 @@ export class AdminComponent implements OnInit {
 
   get respondentGroupsParaEdit(): RespondentGroup[] {
     if (!this.editCupos.length) return this.respondentGroups;
-    return this.respondentGroups.filter((g) => this.editCupos.includes(g.nombre));
+    return this.respondentGroups.filter((g) => this.editCupos.includes(g.value));
   }
 
   async onEditSurveyChange(): Promise<void> {

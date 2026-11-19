@@ -67,8 +67,41 @@ interface OptionDraft {
                   <div class="question-content">
                     @if (editingQuestionId === question.id) {
                       <form class="edit-prompt-form" (ngSubmit)="saveEditQuestion(question)">
-                        <input [name]="'edit-' + question.id" [(ngModel)]="editingPrompt" maxlength="1000" required autofocus>
-                        <div class="edit-actions">
+                        <label class="wide">Pregunta
+                          <input [name]="'edit-' + question.id" [(ngModel)]="editingPrompt" maxlength="1000" required autofocus>
+                        </label>
+                        <label class="wide">Tipo de respuesta
+                          <select [name]="'edit-type-' + question.id" [(ngModel)]="editingQuestionType" (ngModelChange)="onEditQuestionTypeChange()" required>
+                            @for (type of questionTypes; track type.code) {
+                              <option [value]="type.code">{{ type.label }}</option>
+                            }
+                          </select>
+                        </label>
+                        @if (editingSelectedType?.is_numeric) {
+                          <label>Valor mínimo (opcional)
+                            <input [name]="'edit-min-' + question.id" type="number" step="any" [(ngModel)]="editingMinValue">
+                          </label>
+                          <label>Valor máximo (opcional)
+                            <input [name]="'edit-max-' + question.id" type="number" step="any" [(ngModel)]="editingMaxValue">
+                          </label>
+                        } @else if (editingSelectedType && editingSelectedType.min_options > 0) {
+                          <div class="wide option-editor">
+                            <strong>Alternativas</strong>
+                            @for (opt of editingOptionDrafts; track $index; let i = $index) {
+                              <div class="option-field">
+                                <label [for]="'edit-opt-' + question.id + '-' + i">Alternativa {{ i + 1 }}</label>
+                                <div class="option-row">
+                                  <input [id]="'edit-opt-' + question.id + '-' + i" [name]="'edit-opt-' + question.id + '-' + i" [(ngModel)]="opt.label" maxlength="300" required>
+                                  @if (editingOptionDrafts.length > editingSelectedType.min_options) {
+                                    <button type="button" class="remove-option" (click)="editingOptionDrafts.splice(i, 1)">Quitar</button>
+                                  }
+                                </div>
+                              </div>
+                            }
+                            <button type="button" class="add-option" (click)="editingOptionDrafts.push({ label: '', isCorrect: false })">Agregar alternativa</button>
+                          </div>
+                        }
+                        <div class="edit-actions wide">
                           <app-button type="submit" variant="secondary" [disabled]="busy || !editingPrompt.trim()">Guardar</app-button>
                           <button type="button" class="cancel-btn" (click)="cancelEditQuestion()">Cancelar</button>
                         </div>
@@ -322,6 +355,10 @@ export class SurveyDetailComponent implements OnInit, OnDestroy {
   busy = false;
   editingQuestionId: string | null = null;
   editingPrompt = '';
+  editingQuestionType = '';
+  editingOptionDrafts: OptionDraft[] = [];
+  editingMinValue: number | null = null;
+  editingMaxValue: number | null = null;
   canPause = false;
   private surveyId = '';
   private stopWatching: (() => void) | null = null;
@@ -454,29 +491,71 @@ export class SurveyDetailComponent implements OnInit, OnDestroy {
     }
   }
 
+  get editingSelectedType(): QuestionType | undefined {
+    return this.questionTypes.find((t) => t.code === this.editingQuestionType);
+  }
+
   startEditQuestion(question: Question): void {
     this.editingQuestionId = question.id;
     this.editingPrompt = question.prompt;
+    this.editingQuestionType = question.question_type;
+    this.editingMinValue = question.min_value;
+    this.editingMaxValue = question.max_value;
+    this.editingOptionDrafts = question.options.length
+      ? question.options.map((o) => ({ label: o.label, isCorrect: o.is_correct ?? false }))
+      : [{ label: '', isCorrect: false }, { label: '', isCorrect: false }];
     this.error = '';
   }
 
   cancelEditQuestion(): void {
     this.editingQuestionId = null;
     this.editingPrompt = '';
+    this.editingQuestionType = '';
+    this.editingOptionDrafts = [];
+    this.editingMinValue = null;
+    this.editingMaxValue = null;
+  }
+
+  onEditQuestionTypeChange(): void {
+    const type = this.editingSelectedType;
+    if (!type) return;
+    if (type.min_options > 0) {
+      if (this.editingOptionDrafts.length < type.min_options) {
+        this.editingOptionDrafts = Array.from({ length: type.min_options }, () => ({ label: '', isCorrect: false }));
+      }
+    } else {
+      this.editingOptionDrafts = [];
+      this.editingMinValue = null;
+      this.editingMaxValue = null;
+    }
   }
 
   async saveEditQuestion(question: Question): Promise<void> {
     if (!this.survey || !this.editingPrompt.trim()) return;
+    const type = this.editingSelectedType;
+    if (!type) return;
+    const options = type.min_options > 0
+      ? this.editingOptionDrafts.map(({ label, isCorrect }) => ({ label: label.trim(), is_correct: isCorrect })).filter((o) => o.label)
+      : null;
+    if (options !== null && options.length < type.min_options) {
+      this.error = `Agrega al menos ${type.min_options} alternativas.`;
+      return;
+    }
     this.busy = true;
     this.error = '';
     try {
       const updated = await firstValueFrom(this.http.put<Question>(
         `/api/surveys/${this.surveyId}/questions/${question.id}`,
-        { prompt: this.editingPrompt.trim() },
+        {
+          prompt: this.editingPrompt.trim(),
+          questionType: this.editingQuestionType,
+          options,
+          minValue: type.is_numeric ? this.editingMinValue : null,
+          maxValue: type.is_numeric ? this.editingMaxValue : null,
+        },
       ));
       this.survey.questions = this.survey.questions.map((item) => item.id === updated.id ? updated : item);
-      this.editingQuestionId = null;
-      this.editingPrompt = '';
+      this.cancelEditQuestion();
     } catch {
       this.error = 'No se pudo editar la pregunta.';
     } finally {
